@@ -6,6 +6,9 @@ import LoginPage from '@/pages/login'
 import DashboardPage from '@/pages/dashboard'
 import SettingsPage from '@/pages/settings'
 import ServicesPage from '@/pages/services'
+import ConnectionsPage from '@/pages/connections'
+import LogsPage from '@/pages/logs'
+import DiagnosticsPage from '@/pages/diagnostics'
 
 export default function App() {
   return (
@@ -18,6 +21,9 @@ export default function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/services" element={<ServicesPage />} />
+              <Route path="/connections" element={<ConnectionsPage />} />
+              <Route path="/logs" element={<LogsPage />} />
+              <Route path="/diagnostics" element={<DiagnosticsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

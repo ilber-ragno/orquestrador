@@ -16,13 +16,13 @@ import {
 const menuItems = [
   { label: 'Visão Geral', icon: LayoutDashboard, path: '/', enabled: true },
   { label: 'Setup Guiado', icon: Compass, path: '/setup', enabled: false },
-  { label: 'Conexões', icon: Link2, path: '/connections', enabled: false },
+  { label: 'Conexões', icon: Link2, path: '/connections', enabled: true },
   { label: 'Planos e Limites', icon: CreditCard, path: '/plans', enabled: false },
   { label: 'Serviços', icon: Server, path: '/services', enabled: true },
-  { label: 'Logs e Auditoria', icon: ScrollText, path: '/logs', enabled: false },
+  { label: 'Logs e Auditoria', icon: ScrollText, path: '/logs', enabled: true },
   { label: 'Tarefas', icon: ListTodo, path: '/tasks', enabled: false },
   { label: 'Segurança', icon: ShieldCheck, path: '/security', enabled: false },
-  { label: 'Diagnóstico', icon: Stethoscope, path: '/diagnostics', enabled: false },
+  { label: 'Diagnóstico', icon: Stethoscope, path: '/diagnostics', enabled: true },
   { label: 'Configurações', icon: Settings, path: '/settings', enabled: true },
 ]
 

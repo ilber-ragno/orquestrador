@@ -82,8 +82,10 @@ model Instance {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  configs       InstanceConfig[]
-  configHistory ConfigHistory[]
+  configs         InstanceConfig[]
+  configHistory   ConfigHistory[]
+  providers       Provider[]
+  apiIntegrations ApiIntegration[]
 
   @@map("instances")
 }
@@ -118,4 +120,53 @@ model ConfigHistory {
   @@index([instanceId])
   @@index([createdAt])
   @@map("config_history")
+}
+
+enum ProviderType {
+  OPENAI
+  ANTHROPIC
+  OPENROUTER
+  CUSTOM
+}
+
+model Provider {
+  id         String       @id @default(cuid())
+  instanceId String       @map("instance_id")
+  type       ProviderType
+  name       String
+  apiKey     String       @map("api_key")
+  baseUrl    String?      @map("base_url")
+  model      String?
+  isActive   Boolean      @default(true) @map("is_active")
+  isDefault  Boolean      @default(false) @map("is_default")
+  priority   Int          @default(0)
+  lastTestAt DateTime?    @map("last_test_at")
+  lastTestOk Boolean?     @map("last_test_ok")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@map("providers")
+}
+
+model ApiIntegration {
+  id              String  @id @default(cuid())
+  instanceId      String  @map("instance_id")
+  name            String
+  baseUrl         String  @map("base_url")
+  authType        String  @default("bearer") @map("auth_type")
+  authCredentials String? @map("auth_credentials")
+  scopes          Json?
+  rateLimitReqs   Int?    @map("rate_limit_reqs")
+  rateLimitWindow Int?    @map("rate_limit_window")
+  isActive        Boolean @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@map("api_integrations")
 }
