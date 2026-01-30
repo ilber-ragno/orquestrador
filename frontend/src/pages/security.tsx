@@ -137,9 +137,9 @@ function UsersPanel() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium truncate">{u.name}</span>
                     <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium', roleBadge[u.role] || roleBadge.CLIENT)}>{u.role}</span>
-                    {u.twoFactorEnabled && <Smartphone className="h-3 w-3 text-success" title="2FA ativo" />}
+                    {u.twoFactorEnabled && <span title="2FA ativo"><Smartphone className="h-3 w-3 text-success" /></span>}
                     {!u.isActive && <span className="text-[10px] text-error bg-error/10 px-1.5 py-0.5 rounded-full">Inativo</span>}
-                    {u.lockedUntil && new Date(u.lockedUntil) > new Date() && <Lock className="h-3 w-3 text-error" title="Conta bloqueada" />}
+                    {u.lockedUntil && new Date(u.lockedUntil) > new Date() && <span title="Conta bloqueada"><Lock className="h-3 w-3 text-error" /></span>}
                   </div>
                   <p className="text-xs text-muted-foreground">{u.email} · {u.lastLoginAt ? `Último login: ${new Date(u.lastLoginAt).toLocaleDateString('pt-BR')}` : 'Nunca logou'}</p>
                 </div>
