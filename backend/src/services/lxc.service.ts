@@ -1,10 +1,11 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import os from 'os';
 
-const exec = promisify(execFile);
+const execAsync = promisify(execFile);
 
 const SSH_KEY = process.env.LXC_SSH_KEY || '';
-const DEFAULT_HOST = '145.223.31.7';
+const LOCAL_IP = '145.223.31.7';
 
 interface ExecResult {
   stdout: string;
@@ -12,17 +13,18 @@ interface ExecResult {
   exitCode: number;
 }
 
-async function sshExec(host: string, command: string, timeout = 30000): Promise<ExecResult> {
-  const args = [
-    '-o', 'StrictHostKeyChecking=no',
-    '-o', 'ConnectTimeout=10',
-    ...(SSH_KEY ? ['-i', SSH_KEY] : []),
-    `root@${host}`,
-    command,
-  ];
+function isLocalHost(host: string): boolean {
+  if (host === 'localhost' || host === '127.0.0.1' || host === LOCAL_IP) return true;
+  const interfaces = os.networkInterfaces();
+  for (const iface of Object.values(interfaces)) {
+    if (iface?.some((a) => a.address === host)) return true;
+  }
+  return false;
+}
 
+async function runCommand(command: string, timeout = 30000): Promise<ExecResult> {
   try {
-    const { stdout, stderr } = await exec('ssh', args, { timeout });
+    const { stdout, stderr } = await execAsync('bash', ['-c', command], { timeout });
     return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 };
   } catch (err: any) {
     return {
@@ -33,8 +35,25 @@ async function sshExec(host: string, command: string, timeout = 30000): Promise<
   }
 }
 
-export async function listContainers(host: string = DEFAULT_HOST) {
-  const result = await sshExec(host, 'lxc list --format json');
+async function hostExec(host: string, command: string, timeout = 30000): Promise<ExecResult> {
+  if (isLocalHost(host)) {
+    return runCommand(command, timeout);
+  }
+
+  const sshArgs = [
+    'ssh',
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'ConnectTimeout=10',
+    ...(SSH_KEY ? ['-i', SSH_KEY] : []),
+    `root@${host}`,
+    command,
+  ].join(' ');
+
+  return runCommand(sshArgs, timeout);
+}
+
+export async function listContainers(host: string = LOCAL_IP) {
+  const result = await hostExec(host, 'lxc list --format json');
   if (result.exitCode !== 0) throw new Error(`Failed to list containers: ${result.stderr}`);
   try {
     const containers = JSON.parse(result.stdout);
@@ -64,7 +83,7 @@ export async function listContainers(host: string = DEFAULT_HOST) {
 }
 
 export async function getContainerStatus(host: string, containerName: string) {
-  const result = await sshExec(host, `lxc info ${containerName} --format json`);
+  const result = await hostExec(host, `lxc info ${containerName} --format json`);
   if (result.exitCode !== 0) throw new Error(`Container ${containerName}: ${result.stderr}`);
   try {
     const info = JSON.parse(result.stdout);
@@ -91,14 +110,14 @@ export async function getContainerStatus(host: string, containerName: string) {
 }
 
 export async function controlContainer(host: string, containerName: string, action: 'start' | 'stop' | 'restart') {
-  const result = await sshExec(host, `lxc ${action} ${containerName}`, 60000);
+  const result = await hostExec(host, `lxc ${action} ${containerName}`, 60000);
   if (result.exitCode !== 0) throw new Error(`Failed to ${action} ${containerName}: ${result.stderr}`);
   return { success: true, action, container: containerName, output: result.stdout };
 }
 
 export async function execInContainer(host: string, containerName: string, command: string, timeout = 30000) {
   const escapedCmd = command.replace(/'/g, "'\\''");
-  const result = await sshExec(host, `lxc exec ${containerName} -- bash -c '${escapedCmd}'`, timeout);
+  const result = await hostExec(host, `lxc exec ${containerName} -- bash -c '${escapedCmd}'`, timeout);
   return result;
 }
 
@@ -123,7 +142,6 @@ export async function getContainerServices(host: string, containerName: string) 
 }
 
 export async function applyConfigToContainer(host: string, containerName: string, configKey: string, configValue: string) {
-  // Write config to container
   const escapedValue = configValue.replace(/'/g, "'\\''").replace(/"/g, '\\"');
   const result = await execInContainer(host, containerName, `mkdir -p /etc/clawdbot && echo '${escapedValue}' > /etc/clawdbot/${configKey}`);
   return { success: result.exitCode === 0, output: result.stdout, error: result.stderr };

@@ -4,10 +4,11 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { AppError } from '../middleware/error-handler.js';
 import { prisma } from '../lib/prisma.js';
+import * as lxc from '../services/lxc.service.js';
 
 const router = Router();
 
-// GET /instances - List all instances
+// GET /instances - List all instances with real container status
 router.get('/', authenticate, async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const instances = await prisma.instance.findMany({
@@ -18,17 +19,52 @@ router.get('/', authenticate, async (_req: Request, res: Response, next: NextFun
       },
     });
 
-    const result = instances.map((inst) => ({
-      id: inst.id,
-      name: inst.name,
-      slug: inst.slug,
-      description: inst.description,
-      status: inst.status,
-      createdAt: inst.createdAt,
-      updatedAt: inst.updatedAt,
-      configCount: inst.configs.length,
-      historyCount: inst._count.configHistory,
-    }));
+    // Fetch real container status from LXC
+    const hosts = [...new Set(instances.map((i) => i.containerHost).filter(Boolean))] as string[];
+    const containerStatusMap = new Map<string, string>();
+    for (const host of hosts) {
+      try {
+        const containers = await lxc.listContainers(host);
+        for (const c of containers) {
+          containerStatusMap.set(`${host}:${c.name}`, c.status);
+        }
+      } catch {
+        // Host unreachable - containers stay as DB status
+      }
+    }
+
+    const result = instances.map((inst) => {
+      // Sync real status from LXC
+      let realStatus = inst.status;
+      if (inst.containerHost && inst.containerName) {
+        const lxcStatus = containerStatusMap.get(`${inst.containerHost}:${inst.containerName}`);
+        if (lxcStatus) {
+          realStatus = lxcStatus === 'running' ? 'running' : 'stopped';
+        }
+      }
+
+      return {
+        id: inst.id,
+        name: inst.name,
+        slug: inst.slug,
+        description: inst.description,
+        status: realStatus,
+        containerName: inst.containerName,
+        containerHost: inst.containerHost,
+        containerType: inst.containerType,
+        createdAt: inst.createdAt,
+        updatedAt: inst.updatedAt,
+        configCount: inst.configs.length,
+        historyCount: inst._count.configHistory,
+      };
+    });
+
+    // Update DB with real statuses
+    for (const inst of result) {
+      if (inst.status !== instances.find((i) => i.id === inst.id)?.status) {
+        await prisma.instance.update({ where: { id: inst.id }, data: { status: inst.status } });
+      }
+    }
 
     res.json(result);
   } catch (err) {

@@ -25,6 +25,12 @@ router.get('/', authenticate, async (_req: Request, res: Response, next: NextFun
         for (const c of hostContainers) {
           const mapped = instances.find((i) => i.containerName === c.name && i.containerHost === host);
           containers.push({ ...c, host, instance: mapped || null });
+
+          // Sync real status to DB
+          if (mapped) {
+            const dbStatus = c.status === 'running' ? 'running' : 'stopped';
+            await prisma.instance.update({ where: { id: mapped.id }, data: { status: dbStatus } });
+          }
         }
       } catch (err: any) {
         containers.push({ name: `[${host}]`, status: 'unreachable', error: err.message, host, instance: null });

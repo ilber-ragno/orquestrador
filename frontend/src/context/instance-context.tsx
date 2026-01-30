@@ -7,6 +7,9 @@ export interface Instance {
   slug: string
   description: string | null
   status: string
+  containerName: string | null
+  containerHost: string | null
+  containerType: string | null
   configCount: number
   historyCount: number
   createdAt: string
