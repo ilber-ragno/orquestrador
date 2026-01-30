@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+.prisma/
+prisma/migrations/**/migration_lock.toml
