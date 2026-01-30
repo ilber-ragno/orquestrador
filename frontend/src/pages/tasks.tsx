@@ -66,7 +66,7 @@ export default function TasksPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tarefas</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Ações em Andamento</h1>
           <p className="text-muted-foreground text-sm mt-1">Jobs e execuções do sistema</p>
         </div>
         <Button variant="outline" size="sm" className="gap-2" onClick={() => { fetchJobs(); fetchStats() }} disabled={loading}>

@@ -92,7 +92,7 @@ export default function ConnectionsPage() {
   if (!selectedId) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
-        Selecione uma instância para gerenciar conexões
+        Selecione um Clawdbot para gerenciar conexões
       </div>
     )
   }
@@ -100,8 +100,8 @@ export default function ConnectionsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Conexões</h1>
-        <p className="text-muted-foreground text-sm mt-1">Providers IA e integrações de API</p>
+        <h1 className="text-2xl font-bold tracking-tight">Inteligência e APIs</h1>
+        <p className="text-muted-foreground text-sm mt-1">Provedores de IA e integrações externas</p>
       </div>
 
       {/* Tabs */}
@@ -114,7 +114,7 @@ export default function ConnectionsPage() {
           )}
         >
           <Brain className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
-          Providers IA
+          Provedores de IA
         </button>
         <button
           onClick={() => setTab('integrations')}
@@ -124,7 +124,7 @@ export default function ConnectionsPage() {
           )}
         >
           <Link2 className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
-          Integrações API
+          Integrações Externas
         </button>
       </div>
 
@@ -187,7 +187,7 @@ function ProvidersPanel({ instanceId }: { instanceId: string }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {providers.length} provider{providers.length !== 1 ? 's' : ''} configurado{providers.length !== 1 ? 's' : ''}
+          {providers.length} provedor{providers.length !== 1 ? 'es' : ''} de IA configurado{providers.length !== 1 ? 's' : ''}
         </p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-2" onClick={fetchProviders} disabled={loading}>
@@ -195,7 +195,7 @@ function ProvidersPanel({ instanceId }: { instanceId: string }) {
             Atualizar
           </Button>
           <Button size="sm" className="gap-2" onClick={() => { setEditingProvider(null); setShowForm(true) }}>
-            <Plus className="h-3 w-3" /> Novo Provider
+            <Plus className="h-3 w-3" /> Novo Provedor
           </Button>
         </div>
       </div>
@@ -217,8 +217,8 @@ function ProvidersPanel({ instanceId }: { instanceId: string }) {
         <Card>
           <CardContent className="py-12 text-center">
             <Brain className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
-            <p className="text-muted-foreground text-sm">Nenhum provider configurado</p>
-            <p className="text-muted-foreground/60 text-xs mt-1">Adicione um provider de IA para começar</p>
+            <p className="text-muted-foreground text-sm">Nenhum provedor de IA configurado</p>
+            <p className="text-muted-foreground/60 text-xs mt-1">Adicione um provedor para começar</p>
           </CardContent>
         </Card>
       ) : (
@@ -383,7 +383,7 @@ function ProviderForm({
       onSaved()
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
-      setError(msg || 'Erro ao salvar provider')
+      setError(msg || 'Erro ao salvar provedor')
     } finally {
       setSaving(false)
     }
@@ -393,7 +393,7 @@ function ProviderForm({
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center justify-between">
-          <span>{provider ? 'Editar Provider' : 'Novo Provider'}</span>
+          <span>{provider ? 'Editar Provedor' : 'Novo Provedor'}</span>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onCancel}>
             <X className="h-4 w-4" />
           </Button>
@@ -445,7 +445,7 @@ function ProviderForm({
               onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
               className="rounded border-input"
             />
-            <Label htmlFor="isDefault" className="text-sm cursor-pointer">Definir como provider padrão</Label>
+            <Label htmlFor="isDefault" className="text-sm cursor-pointer">Definir como provedor padrão</Label>
           </div>
 
           {error && (
@@ -458,7 +458,7 @@ function ProviderForm({
             <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancelar</Button>
             <Button type="submit" size="sm" className="gap-2" disabled={saving}>
               {saving && <Loader2 className="h-3 w-3 animate-spin" />}
-              {provider ? 'Salvar Alterações' : 'Criar Provider'}
+              {provider ? 'Salvar Alterações' : 'Criar Provedor'}
             </Button>
           </div>
         </form>
@@ -532,7 +532,7 @@ function IntegrationsPanel({ instanceId }: { instanceId: string }) {
           <CardContent className="py-12 text-center">
             <Link2 className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
             <p className="text-muted-foreground text-sm">Nenhuma integração configurada</p>
-            <p className="text-muted-foreground/60 text-xs mt-1">Conecte APIs externas para expandir funcionalidades</p>
+            <p className="text-muted-foreground/60 text-xs mt-1">Conecte serviços externos para expandir funcionalidades</p>
           </CardContent>
         </Card>
       ) : (

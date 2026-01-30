@@ -62,8 +62,8 @@ export default function PlansPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Planos e Limites</h1>
-          <p className="text-muted-foreground text-sm mt-1">Gestão de planos comerciais e consumo por instância</p>
+          <h1 className="text-2xl font-bold tracking-tight">Planos de Uso</h1>
+          <p className="text-muted-foreground text-sm mt-1">Gerencie os limites de uso de cada instância</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-2" onClick={fetchPlans} disabled={loading}>
@@ -79,7 +79,7 @@ export default function PlansPage() {
       {usage?.limits && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Zap className="h-4 w-4" /> Consumo da Instância</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2"><Zap className="h-4 w-4" /> Uso da Instância</CardTitle>
             <CardDescription>Plano: {usage.plan?.name || 'Nenhum'}</CardDescription>
           </CardHeader>
           <CardContent>

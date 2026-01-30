@@ -40,7 +40,7 @@ export default function SecurityPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Segurança</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Usuários e Acesso</h1>
         <p className="text-muted-foreground text-sm mt-1">Usuários, permissões e autenticação</p>
       </div>
       <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit flex-wrap">

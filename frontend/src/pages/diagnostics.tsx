@@ -143,7 +143,7 @@ export default function DiagnosticsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Diagnóstico</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Verificação de Saúde</h1>
           <p className="text-muted-foreground text-sm mt-1">Saúde e métricas do sistema</p>
         </div>
         <div className="flex gap-2">

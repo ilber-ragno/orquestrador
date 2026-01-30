@@ -14,15 +14,15 @@ import {
 } from 'lucide-react'
 
 const menuItems = [
-  { label: 'Visão Geral', icon: LayoutDashboard, path: '/', enabled: true },
-  { label: 'Setup Guiado', icon: Compass, path: '/setup', enabled: true },
-  { label: 'Conexões', icon: Link2, path: '/connections', enabled: true },
-  { label: 'Planos e Limites', icon: CreditCard, path: '/plans', enabled: true },
-  { label: 'Serviços', icon: Server, path: '/services', enabled: true },
-  { label: 'Logs e Auditoria', icon: ScrollText, path: '/logs', enabled: true },
-  { label: 'Tarefas', icon: ListTodo, path: '/tasks', enabled: true },
-  { label: 'Segurança', icon: ShieldCheck, path: '/security', enabled: true },
-  { label: 'Diagnóstico', icon: Stethoscope, path: '/diagnostics', enabled: true },
+  { label: 'Painel', icon: LayoutDashboard, path: '/', enabled: true },
+  { label: 'Assistente Inicial', icon: Compass, path: '/setup', enabled: true },
+  { label: 'Inteligência e APIs', icon: Link2, path: '/connections', enabled: true },
+  { label: 'Planos de Uso', icon: CreditCard, path: '/plans', enabled: true },
+  { label: 'Serviços Ativos', icon: Server, path: '/services', enabled: true },
+  { label: 'Histórico', icon: ScrollText, path: '/logs', enabled: true },
+  { label: 'Ações em Andamento', icon: ListTodo, path: '/tasks', enabled: true },
+  { label: 'Usuários e Acesso', icon: ShieldCheck, path: '/security', enabled: true },
+  { label: 'Verificação de Saúde', icon: Stethoscope, path: '/diagnostics', enabled: true },
   { label: 'Configurações', icon: Settings, path: '/settings', enabled: true },
 ]
 

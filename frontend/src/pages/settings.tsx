@@ -128,7 +128,7 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
-          <p className="text-muted-foreground text-sm mt-1">Configuração da instância selecionada</p>
+          <p className="text-muted-foreground text-sm mt-1">Ajustes do Clawdbot selecionado</p>
         </div>
         <Button
           variant="outline"

@@ -107,8 +107,8 @@ export default function ServicesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Serviços</h1>
-          <p className="text-muted-foreground text-sm mt-1">Gerenciar serviços systemd do servidor</p>
+          <h1 className="text-2xl font-bold tracking-tight">Serviços Ativos</h1>
+          <p className="text-muted-foreground text-sm mt-1">Gerenciar serviços em execução no servidor</p>
         </div>
         <Button variant="outline" size="sm" className="gap-2" onClick={fetchServices} disabled={loading}>
           {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
@@ -261,18 +261,18 @@ export default function ServicesPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground flex items-center gap-1"><Power className="h-3 w-3" /> Boot</span>
+                        <span className="text-muted-foreground flex items-center gap-1"><Power className="h-3 w-3" /> Início automático</span>
                         <span className="font-medium">{selectedService.enabled ? 'Habilitado' : 'Desabilitado'}</span>
                       </div>
                       {selectedService.pid && (
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground flex items-center gap-1"><Cpu className="h-3 w-3" /> PID</span>
+                          <span className="text-muted-foreground flex items-center gap-1"><Cpu className="h-3 w-3" /> Processo</span>
                           <span className="font-mono text-xs">{selectedService.pid}</span>
                         </div>
                       )}
                       {selectedService.uptime && (
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Uptime</span>
+                          <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Tempo ativo</span>
                           <span className="font-medium">{selectedService.uptime}</span>
                         </div>
                       )}
@@ -304,11 +304,11 @@ export default function ServicesPage() {
                     <div className="flex gap-2">
                       {!selectedService.enabled ? (
                         <Button size="sm" variant="outline" className="gap-1 flex-1 text-xs" onClick={() => handleAction(selectedService.name, 'enable')}>
-                          <Power className="h-3 w-3" /> Habilitar Boot
+                          <Power className="h-3 w-3" /> Ativar início automático
                         </Button>
                       ) : (
                         <Button size="sm" variant="outline" className="gap-1 flex-1 text-xs" onClick={() => handleAction(selectedService.name, 'disable')}>
-                          <PowerOff className="h-3 w-3" /> Desabilitar Boot
+                          <PowerOff className="h-3 w-3" /> Desativar início automático
                         </Button>
                       )}
                     </div>

@@ -110,7 +110,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Visão Geral</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Painel</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {selectedInstance
               ? `${selectedInstance.name} — ${selectedInstance.description || selectedInstance.slug}`
@@ -133,15 +133,14 @@ export default function DashboardPage() {
                   <Server className={cn('h-5 w-5', containerRunning ? 'text-success' : 'text-error')} />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Container: {instanceContainer.name}</p>
+                  <p className="text-sm font-medium">Servidor: {instanceContainer.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {containerRunning ? 'Em execução' : 'Parado'}
-                    {instanceContainer.state?.pid ? ` · PID ${instanceContainer.state.pid}` : ''}
-                    {selectedInstance.containerType ? ` · ${selectedInstance.containerType}` : ''}
+                    {selectedInstance.containerType ? ` · Tipo: ${selectedInstance.containerType}` : ''}
                   </p>
                 </div>
               </div>
-              <StatusBadge status={containerStatus} label={containerRunning ? 'Running' : 'Stopped'} />
+              <StatusBadge status={containerStatus} label={containerRunning ? 'Ativo' : 'Parado'} />
             </div>
             {instanceContainer.state && containerRunning && (
               <div className="grid grid-cols-3 gap-4 mt-4 pt-3 border-t border-border">
@@ -162,7 +161,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2">
                   <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
                   <div>
-                    <p className="text-xs text-muted-foreground">IP</p>
+                    <p className="text-xs text-muted-foreground">Endereço</p>
                     <p className="text-sm font-medium">{instanceContainer.state.network?.find(n => n.name === 'eth0')?.addresses?.[0]?.substring(0, 20) || 'N/A'}</p>
                   </div>
                 </div>
@@ -176,7 +175,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Gateway</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Conexão Principal</CardTitle>
             {gatewayStatus === 'online' ? <Wifi className="h-4 w-4 text-success" /> : <WifiOff className="h-4 w-4 text-muted-foreground" />}
           </CardHeader>
           <CardContent>
@@ -192,7 +191,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Provider IA</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Inteligência Artificial</CardTitle>
             <Activity className={cn('h-4 w-4', providerStatus === 'online' ? 'text-success' : 'text-warning')} />
           </CardHeader>
           <CardContent>
@@ -203,7 +202,7 @@ export default function DashboardPage() {
               />
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              {provider?.default ? `Padrão: ${provider.default}` : 'Nenhum provider definido'}
+              {provider?.default ? `Modelo: ${provider.default}` : 'Nenhuma IA configurada'}
             </p>
           </CardContent>
         </Card>
@@ -233,7 +232,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               <StatusBadge status="online" label="OK" />
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Sessão JWT ativa</p>
+            <p className="text-xs text-muted-foreground mt-2">Você está conectado</p>
           </CardContent>
         </Card>
       </div>
@@ -245,9 +244,9 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Container className="h-4 w-4" />
-              Containers LXC
+              Servidores do Clawdbot
             </CardTitle>
-            <CardDescription>{runningCount}/{totalCount} containers ativos</CardDescription>
+            <CardDescription>{runningCount}/{totalCount} servidores ativos</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -266,13 +265,13 @@ export default function DashboardPage() {
                     {c.state?.memory && <span>{formatBytes(c.state.memory.usage)}</span>}
                     <StatusBadge
                       status={c.status === 'running' ? 'online' : 'offline'}
-                      label={c.status === 'running' ? 'Running' : 'Stopped'}
+                      label={c.status === 'running' ? 'Ativo' : 'Parado'}
                     />
                   </div>
                 </div>
               ))}
               {containers.length === 0 && !containersLoading && (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhum container encontrado</p>
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum servidor encontrado</p>
               )}
               {containersLoading && (
                 <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
@@ -288,23 +287,23 @@ export default function DashboardPage() {
               <Settings className="h-4 w-4" />
               Configuração
             </CardTitle>
-            <CardDescription>Estado da instância selecionada</CardDescription>
+            <CardDescription>Estado do Clawdbot selecionado</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Container</span>
+                <span className="text-muted-foreground">Servidor</span>
                 <span className="font-medium">{selectedInstance?.containerName || 'N/A'}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Status</span>
                 <StatusBadge
                   status={selectedInstance?.status === 'running' ? 'online' : 'offline'}
-                  label={selectedInstance?.status === 'running' ? 'Running' : 'Stopped'}
+                  label={selectedInstance?.status === 'running' ? 'Ativo' : 'Parado'}
                 />
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Chaves configuradas</span>
+                <span className="text-muted-foreground">Configurações realizadas</span>
                 <span className="font-medium">{instanceStatus?.summary?.configCount ?? 0}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
@@ -321,20 +320,20 @@ export default function DashboardPage() {
               </div>
 
               <div className="pt-3 border-t border-border space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Primeiros passos:</p>
+                <p className="text-xs font-medium text-muted-foreground">O que fazer agora:</p>
                 <div className="flex items-center gap-2 text-sm">
                   <span className={cn('h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold',
                     provider?.configured ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground')}>1</span>
-                  <span className="text-muted-foreground">Provedor de IA em <strong>Conexões</strong></span>
+                  <span className="text-muted-foreground">Configurar IA em <strong>Conexões</strong></span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className={cn('h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold',
                     gateway?.mode ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground')}>2</span>
-                  <span className="text-muted-foreground">Gateway em <strong>Serviços</strong></span>
+                  <span className="text-muted-foreground">Conexão Principal em <strong>Serviços</strong></span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">3</span>
-                  <span className="text-muted-foreground">Ou use o <strong>Setup Guiado</strong></span>
+                  <span className="text-muted-foreground">Ou use o <strong>Assistente Inicial</strong></span>
                 </div>
               </div>
             </div>

@@ -75,8 +75,8 @@ export default function SetupPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Setup Guiado</h1>
-          <p className="text-muted-foreground text-sm mt-1">Assistente de configuração da instância</p>
+          <h1 className="text-2xl font-bold tracking-tight">Assistente de Configuração</h1>
+          <p className="text-muted-foreground text-sm mt-1">Siga os passos para configurar sua instância</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-2" onClick={handleValidate} disabled={validating}>
@@ -92,7 +92,7 @@ export default function SetupPage() {
       <Card>
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">{setup?.completed ? 'Setup completo!' : `${completedCount}/${totalSteps} etapas concluídas`}</span>
+            <span className="text-sm font-medium">{setup?.completed ? 'Tudo configurado!' : `${completedCount}/${totalSteps} passos concluídos`}</span>
             <span className="text-sm text-muted-foreground">{progressPercent}%</span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -139,7 +139,7 @@ export default function SetupPage() {
                       <h3 className={cn('text-sm font-medium', isCompleted && 'line-through text-muted-foreground')}>{step.name}</h3>
                     </div>
                     {step.completedAt && (
-                      <p className="text-xs text-muted-foreground mt-0.5">Concluído em {new Date(step.completedAt).toLocaleString('pt-BR')}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Feito em {new Date(step.completedAt).toLocaleString('pt-BR')}</p>
                     )}
                   </div>
                   {!isCompleted && (
