@@ -73,14 +73,26 @@ model AuditLog {
 }
 
 model Instance {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  description String?
-  status      String   @default("stopped")
-  configPath  String?  @map("config_path")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  description     String?
+  status          String   @default("stopped")
+  configPath      String?  @map("config_path")
+  // LXC container mapping
+  containerName   String?  @map("container_name")
+  containerHost   String?  @map("container_host")
+  containerType   String?  @map("container_type")
+  // Gateway config
+  gatewayMode     String?  @map("gateway_mode")
+  gatewayBind     String?  @map("gateway_bind")
+  gatewayPort     Int?     @map("gateway_port")
+  gatewayToken    String?  @map("gateway_token")
+  gatewayStatus   String?  @map("gateway_status")
+  // Plan
+  planId          String?  @map("plan_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   configs         InstanceConfig[]
   configHistory   ConfigHistory[]
@@ -169,4 +181,121 @@ model ApiIntegration {
 
   @@index([instanceId])
   @@map("api_integrations")
+}
+
+// ═══════════════════════════════════════
+// JOB SYSTEM
+// ═══════════════════════════════════════
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Job {
+  id           String    @id @default(cuid())
+  instanceId   String?   @map("instance_id")
+  userId       String    @map("user_id")
+  type         String
+  description  String
+  status       JobStatus @default(PENDING)
+  input        Json?
+  output       Json?
+  error        String?
+  retries      Int       @default(0)
+  maxRetries   Int       @default(3) @map("max_retries")
+  timeout      Int       @default(60000)
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  steps JobStep[]
+
+  @@index([instanceId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("jobs")
+}
+
+model JobStep {
+  id        String    @id @default(cuid())
+  jobId     String    @map("job_id")
+  name      String
+  status    JobStatus @default(PENDING)
+  output    String?
+  error     String?
+  startedAt DateTime? @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  sortOrder Int       @default(0) @map("sort_order")
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("job_steps")
+}
+
+// ═══════════════════════════════════════
+// PLANS & LIMITS
+// ═══════════════════════════════════════
+
+model Plan {
+  id              String  @id @default(cuid())
+  name            String  @unique
+  description     String?
+  maxMessages     Int?    @map("max_messages")
+  maxSessions     Int?    @map("max_sessions")
+  maxTokens       Int?    @map("max_tokens")
+  maxCostCents    Int?    @map("max_cost_cents")
+  maxChannels     Int?    @map("max_channels")
+  maxProviders    Int?    @map("max_providers")
+  blockOnExceed   Boolean @default(true) @map("block_on_exceed")
+  fallbackAction  String  @default("block") @map("fallback_action")
+  isActive        Boolean @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  usages PlanUsage[]
+
+  @@map("plans")
+}
+
+model PlanUsage {
+  id           String   @id @default(cuid())
+  planId       String   @map("plan_id")
+  instanceId   String   @map("instance_id")
+  period       String
+  messages     Int      @default(0)
+  sessions     Int      @default(0)
+  tokensUsed   Int      @default(0) @map("tokens_used")
+  costCents    Int      @default(0) @map("cost_cents")
+  channels     Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, instanceId, period])
+  @@index([instanceId])
+  @@map("plan_usages")
+}
+
+// ═══════════════════════════════════════
+// SETUP PROGRESS
+// ═══════════════════════════════════════
+
+model SetupProgress {
+  id          String   @id @default(cuid())
+  instanceId  String   @unique @map("instance_id")
+  currentStep Int      @default(0) @map("current_step")
+  steps       Json     @default("[]")
+  completed   Boolean  @default(false)
+  startedAt   DateTime @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("setup_progress")
 }
