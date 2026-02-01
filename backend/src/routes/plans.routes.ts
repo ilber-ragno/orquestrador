@@ -18,6 +18,46 @@ router.get('/', authenticate, async (_req: Request, res: Response, next: NextFun
   }
 });
 
+// GET /plans/usage/:instanceId - Get usage for instance (MUST be before /:id to avoid route conflict)
+router.get('/usage/:instanceId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId as string } });
+    if (!inst) return res.status(404).json({ error: { message: 'Instance not found' } });
+
+    const period = new Date().toISOString().slice(0, 7); // YYYY-MM
+    let usage = null;
+    let plan = null;
+
+    if (inst.planId) {
+      plan = await prisma.plan.findUnique({ where: { id: inst.planId } });
+      usage = await prisma.planUsage.findFirst({
+        where: { planId: inst.planId, instanceId: inst.id, period },
+      });
+
+      if (!usage) {
+        usage = await prisma.planUsage.create({
+          data: { planId: inst.planId, instanceId: inst.id, period },
+        });
+      }
+    }
+
+    res.json({
+      plan,
+      usage,
+      limits: plan
+        ? {
+            messages: { used: usage?.messages || 0, max: plan.maxMessages, percent: plan.maxMessages ? Math.round(((usage?.messages || 0) / plan.maxMessages) * 100) : null },
+            sessions: { used: usage?.sessions || 0, max: plan.maxSessions, percent: plan.maxSessions ? Math.round(((usage?.sessions || 0) / plan.maxSessions) * 100) : null },
+            tokens: { used: usage?.tokensUsed || 0, max: plan.maxTokens, percent: plan.maxTokens ? Math.round(((usage?.tokensUsed || 0) / plan.maxTokens) * 100) : null },
+            cost: { used: usage?.costCents || 0, max: plan.maxCostCents, percent: plan.maxCostCents ? Math.round(((usage?.costCents || 0) / plan.maxCostCents) * 100) : null },
+          }
+        : null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /plans/:id - Get plan with usage
 router.get('/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -133,46 +173,6 @@ router.post('/:id/assign/:instanceId', authenticate, requireRole('ADMIN'), async
     });
 
     res.json({ success: true, planId: req.params.id as string, instanceId: req.params.instanceId as string });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /plans/usage/:instanceId - Get usage for instance
-router.get('/usage/:instanceId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId as string } });
-    if (!inst) return res.status(404).json({ error: { message: 'Instance not found' } });
-
-    const period = new Date().toISOString().slice(0, 7); // YYYY-MM
-    let usage = null;
-    let plan = null;
-
-    if (inst.planId) {
-      plan = await prisma.plan.findUnique({ where: { id: inst.planId } });
-      usage = await prisma.planUsage.findFirst({
-        where: { planId: inst.planId, instanceId: inst.id, period },
-      });
-
-      if (!usage) {
-        usage = await prisma.planUsage.create({
-          data: { planId: inst.planId, instanceId: inst.id, period },
-        });
-      }
-    }
-
-    res.json({
-      plan,
-      usage,
-      limits: plan
-        ? {
-            messages: { used: usage?.messages || 0, max: plan.maxMessages, percent: plan.maxMessages ? Math.round(((usage?.messages || 0) / plan.maxMessages) * 100) : null },
-            sessions: { used: usage?.sessions || 0, max: plan.maxSessions, percent: plan.maxSessions ? Math.round(((usage?.sessions || 0) / plan.maxSessions) * 100) : null },
-            tokens: { used: usage?.tokensUsed || 0, max: plan.maxTokens, percent: plan.maxTokens ? Math.round(((usage?.tokensUsed || 0) / plan.maxTokens) * 100) : null },
-            cost: { used: usage?.costCents || 0, max: plan.maxCostCents, percent: plan.maxCostCents ? Math.round(((usage?.costCents || 0) / plan.maxCostCents) * 100) : null },
-          }
-        : null,
-    });
   } catch (err) {
     next(err);
   }

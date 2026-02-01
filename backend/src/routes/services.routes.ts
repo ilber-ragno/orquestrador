@@ -1,7 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { z } from 'zod';
 import { authenticate, requireRole } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
 import { AppError } from '../middleware/error-handler.js';
 import { prisma } from '../lib/prisma.js';
 import * as systemService from '../services/system.service.js';
@@ -33,8 +31,6 @@ router.get('/:name/status', authenticate, async (req: Request, res: Response, ne
 });
 
 // POST /services/:name/:action - Control service (start/stop/restart/enable/disable)
-const serviceActionSchema = z.object({});
-
 router.post(
   '/:name/:action',
   authenticate,

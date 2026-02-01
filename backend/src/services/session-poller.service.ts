@@ -96,9 +96,12 @@ async function pollInstance(instance: { id: string; containerHost: string; conta
       // Only check for escalation in recently active sessions (5 min)
       if (now - session.updatedAt > ESCALATION_CHECK_WINDOW) continue;
 
-      // Check for escalation markers (use sessionId only, not timestamp, to avoid re-processing)
+      // Check for escalation markers - allow re-escalation if protocol returned to ACTIVE
       const escalationKey = session.sessionId;
-      if (processedEscalations.has(escalationKey)) continue;
+      if (processedEscalations.has(escalationKey) && protocol.status === 'ESCALATED') continue;
+      if (processedEscalations.has(escalationKey) && protocol.status === 'ACTIVE') {
+        processedEscalations.delete(escalationKey);
+      }
 
       try {
         const messages = await openclaw.getSessionMessages(host, container, session.sessionId);

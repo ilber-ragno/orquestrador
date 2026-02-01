@@ -580,6 +580,7 @@ router.post(
           resourceId: instance.id,
           details: { name: data.name, slug: data.slug, containerName },
           ipAddress: req.ip,
+          userAgent: req.headers['user-agent'] || null,
           correlationId: req.correlationId,
         },
       });
@@ -647,6 +648,7 @@ router.post('/:id/openclaw-exec', authenticate, requireRole('ADMIN', 'OPERATOR')
 
     // Basic sanity check
     if (cmd.length > 500) return next(new AppError(400, 'CMD_TOO_LONG', 'Comando muito longo'));
+    if (!SAFE_CMD.test(cmd)) return next(new AppError(400, 'INVALID_CMD', 'Comando contém caracteres não permitidos'));
 
     const result = await lxc.execInContainer(inst.containerHost, inst.containerName, `${cmd} 2>&1`, 30000);
 
@@ -658,6 +660,7 @@ router.post('/:id/openclaw-exec', authenticate, requireRole('ADMIN', 'OPERATOR')
         resourceId: inst.id,
         details: { command: cmd, exitCode: result.exitCode } as any,
         ipAddress: req.ip,
+        userAgent: req.headers['user-agent'] || null,
         correlationId: req.correlationId,
       },
     });

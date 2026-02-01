@@ -118,7 +118,9 @@ router.post(
           const config = await openclaw.readConfig(inst.containerHost, inst.containerName);
           if (config) {
             if (!config.gateway) config.gateway = {};
-            config.gateway.token = token;
+            if (!config.gateway.auth) config.gateway.auth = {};
+            config.gateway.auth.token = token;
+            delete config.gateway.token;
             await openclaw.writeConfig(inst.containerHost, inst.containerName, config);
           }
         } catch {}

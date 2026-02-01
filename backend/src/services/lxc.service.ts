@@ -5,7 +5,7 @@ import os from 'os';
 const execAsync = promisify(execFile);
 
 const SSH_KEY = process.env.LXC_SSH_KEY || '';
-const LOCAL_IP = '145.223.31.7';
+const LOCAL_IP = process.env.LXC_LOCAL_IP || '145.223.31.7';
 
 interface ExecResult {
   stdout: string;

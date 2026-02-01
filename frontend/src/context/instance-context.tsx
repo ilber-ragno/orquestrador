@@ -79,11 +79,11 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshInstances()
-  }, [])
+  }, [refreshInstances])
 
   useEffect(() => {
     if (selectedId) refreshStatus()
-  }, [selectedId])
+  }, [selectedId, refreshStatus])
 
   const selectedInstance = instances.find((i) => i.id === selectedId) || null
 

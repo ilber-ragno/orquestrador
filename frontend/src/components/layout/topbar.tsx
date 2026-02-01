@@ -1,7 +1,7 @@
 import { useAuth } from '@/context/auth-context'
 import { Button } from '@/components/ui/button'
 import { Bot, LogOut, Menu, ChevronDown, Moon, Sun } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface TopbarProps {
   onToggleSidebar: () => void
@@ -14,6 +14,17 @@ export function Topbar({ onToggleSidebar, instances, selectedInstance, onSelectI
   const { user, logout } = useAuth()
   const [showInstances, setShowInstances] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const instanceRef = useRef<HTMLDivElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (instanceRef.current && !instanceRef.current.contains(e.target as Node)) setShowInstances(false)
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setShowUserMenu(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
   const [dark, setDark] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -42,7 +53,7 @@ export function Topbar({ onToggleSidebar, instances, selectedInstance, onSelectI
       <div className="h-4 w-px bg-border mx-1" />
 
       {/* Instance selector */}
-      <div className="relative">
+      <div className="relative" ref={instanceRef}>
         <Button
           variant="outline"
           size="sm"
@@ -78,7 +89,7 @@ export function Topbar({ onToggleSidebar, instances, selectedInstance, onSelectI
       </Button>
 
       {/* User menu */}
-      <div className="relative">
+      <div className="relative" ref={userMenuRef}>
         <Button variant="ghost" size="sm" className="gap-2 text-xs" onClick={() => setShowUserMenu(!showUserMenu)}>
           <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary">
             {user?.name?.charAt(0) || 'U'}
