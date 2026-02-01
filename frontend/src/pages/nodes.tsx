@@ -102,7 +102,7 @@ export default function NodesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dispositivos</h1>
           <p className="text-muted-foreground text-sm mt-1">

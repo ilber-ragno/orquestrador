@@ -135,6 +135,9 @@ router.get('/:instId/openclaw-config', authenticate, async (req: Request, res: R
           timeoutSec: config.tools?.exec?.timeoutSec ?? 1800,
           cleanupMs: config.tools?.exec?.cleanupMs ?? 1800000,
           applyPatchEnabled: config.tools?.exec?.applyPatch?.enabled ?? false,
+          security: config.tools?.exec?.security ?? 'allowlist',
+          safeBins: config.tools?.exec?.safeBins ?? [],
+          ask: config.tools?.exec?.ask ?? 'on-miss',
         },
         media: {
           concurrency: config.tools?.media?.concurrency ?? 2,
@@ -331,6 +334,9 @@ const toolsSchema = z.object({
     timeoutSec: z.number().int().min(10).max(7200).optional(),
     cleanupMs: z.number().int().min(10000).max(7200000).optional(),
     applyPatchEnabled: z.boolean().optional(),
+    security: z.enum(['allowlist', 'full', 'off']).optional(),
+    safeBins: z.array(z.string().regex(/^[a-zA-Z0-9._\/-]+$/).max(100)).max(200).optional(),
+    ask: z.enum(['on-miss', 'always', 'never']).optional(),
   }).optional(),
   media: z.object({
     concurrency: z.number().int().min(1).max(10).optional(),
@@ -534,6 +540,9 @@ router.put(
               if (!config.tools.exec.applyPatch) config.tools.exec.applyPatch = {};
               config.tools.exec.applyPatch.enabled = exec.applyPatchEnabled;
             }
+            if (exec.security !== undefined) config.tools.exec.security = exec.security;
+            if (exec.safeBins !== undefined) config.tools.exec.safeBins = exec.safeBins;
+            if (exec.ask !== undefined) config.tools.exec.ask = exec.ask;
           }
           if (media) {
             if (!config.tools.media) config.tools.media = {};

@@ -55,12 +55,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          'fixed top-14 left-0 bottom-0 w-60 bg-sidebar border-r border-sidebar-border z-40 transition-transform duration-200',
-          'lg:translate-x-0',
+          'fixed top-14 left-0 bottom-0 w-60 bg-sidebar border-r border-sidebar-border z-50 transition-transform duration-200 overflow-y-auto',
+          'lg:translate-x-0 lg:z-40',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <nav className="p-3 space-y-1">
+        <nav className="p-3 space-y-1 pb-8">
           {menuItems.map((item) => (
             <NavLink
               key={item.path}

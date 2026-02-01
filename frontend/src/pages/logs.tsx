@@ -176,7 +176,7 @@ export default function LogsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Histórico de Ações</h1>
           <p className="text-muted-foreground text-sm mt-1">Registro imutável de todas as ações do sistema</p>
@@ -301,7 +301,7 @@ export default function LogsPage() {
           </form>
 
           {showFilters && (
-            <div className="flex gap-3 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
               <div className="flex-1">
                 <label className="text-xs text-muted-foreground">Ação</label>
                 <Input
@@ -371,26 +371,26 @@ export default function LogsPage() {
                 className={cn('cursor-pointer transition-colors hover:bg-muted/30', isExpanded && 'ring-1 ring-primary/30')}
                 onClick={() => setExpandedLog(isExpanded ? null : log.id)}
               >
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center gap-3">
+                <CardContent className="py-3 px-3 sm:px-4">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
 
-                    <span className={cn('text-xs font-medium px-2 py-0.5 rounded shrink-0', getActionColor(log.action))}>
+                    <span className={cn('text-xs font-medium px-2 py-0.5 rounded shrink-0 truncate max-w-[180px] sm:max-w-none', getActionColor(log.action))}>
                       {log.action}
                     </span>
 
                     {log.resource && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-none">
                         {log.resource}
                         {log.resourceId && <span className="font-mono ml-1">#{log.resourceId.slice(0, 8)}</span>}
                       </span>
                     )}
 
-                    <span className="flex-1" />
+                    <span className="flex-1 min-w-0" />
 
                     {log.user && (
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <User className="h-3 w-3" /> {log.user.name}
+                        <User className="h-3 w-3 shrink-0" /> <span className="truncate max-w-[80px]">{log.user.name}</span>
                       </span>
                     )}
 

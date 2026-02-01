@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FieldHelp } from '@/components/ui/help-tooltip'
 import { cn } from '@/lib/utils'
+import { t, tLabel, tOptions, tGroup } from '@/lib/term-translations'
 import { useToast } from '@/components/ui/toast'
 import { useInstance } from '@/context/instance-context'
 import {
@@ -25,10 +26,17 @@ import {
   Search,
   ExternalLink,
   Shield,
+  ShieldCheck,
+  ShieldOff,
   Terminal,
   Puzzle,
   Globe,
   Database,
+  X,
+  AlertTriangle,
+  Lock,
+  Ban,
+  ChevronDown,
 } from 'lucide-react'
 
 type TabKey = 'messages' | 'session' | 'agentsDefaults' | 'tools' | 'logging' | 'gateway' | 'commands' | 'plugins' | 'environment'
@@ -103,7 +111,7 @@ interface ConfigSections {
     deny: string[]
     web: { searchEnabled: boolean; fetchEnabled: boolean; searchApiKey: string; searchMaxResults: number; fetchMaxChars: number; fetchReadability: boolean }
     elevated: { enabled: boolean; allowFrom: string[] }
-    exec: { backgroundMs: number; timeoutSec: number; cleanupMs: number; applyPatchEnabled: boolean }
+    exec: { backgroundMs: number; timeoutSec: number; cleanupMs: number; applyPatchEnabled: boolean; security: string; safeBins: string[]; ask: string }
     media: { concurrency: number; imageEnabled: boolean; audioEnabled: boolean; videoEnabled: boolean }
     agentToAgent: { enabled: boolean; allow: string[] }
     byProvider: string
@@ -209,7 +217,7 @@ const defaultSections: ConfigSections = {
     deny: [],
     web: { searchEnabled: true, fetchEnabled: true, searchApiKey: '', searchMaxResults: 5, fetchMaxChars: 50000, fetchReadability: true },
     elevated: { enabled: false, allowFrom: [] },
-    exec: { backgroundMs: 10000, timeoutSec: 1800, cleanupMs: 1800000, applyPatchEnabled: false },
+    exec: { backgroundMs: 10000, timeoutSec: 1800, cleanupMs: 1800000, applyPatchEnabled: false, security: 'allowlist', safeBins: [], ask: 'on-miss' },
     media: { concurrency: 2, imageEnabled: true, audioEnabled: true, videoEnabled: true },
     agentToAgent: { enabled: false, allow: [] },
     byProvider: '',
@@ -336,8 +344,8 @@ export default function OpenClawConfigPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Settings2 className="h-6 w-6" /> Configuração OpenClaw
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Settings2 className="h-5 w-5 sm:h-6 sm:w-6" /> <span className="sm:hidden">OpenClaw</span><span className="hidden sm:inline">Configuração OpenClaw</span>
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             Editor visual das seções de configuração do OpenClaw
@@ -355,20 +363,21 @@ export default function OpenClawConfigPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit flex-wrap">
+      <div className="flex gap-1 p-1 bg-muted rounded-lg overflow-x-auto max-w-full flex-wrap sm:flex-nowrap sm:w-fit">
         {tabs.map(({ k, l, i: Icon }) => (
           <button
             key={k}
             onClick={() => setTab(k)}
             className={cn(
-              'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+              'px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap shrink-0',
               tab === k
                 ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            <Icon className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
-            {l}
+            <Icon className="h-3.5 w-3.5 inline mr-1 sm:mr-1.5 -mt-0.5" />
+            <span className="hidden sm:inline">{l}</span>
+            <span className="sm:hidden">{l.split(' ')[0]}</span>
           </button>
         ))}
       </div>
@@ -625,6 +634,19 @@ function SaveButton({ onClick, saving }: { onClick: () => void; saving?: boolean
   )
 }
 
+function AdvancedToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors pt-2"
+    >
+      <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
+      {open ? 'Ocultar configurações avançadas' : 'Mostrar configurações avançadas'}
+    </button>
+  )
+}
+
 /* ─── Mensagens ─── */
 
 function MessagesPanel({
@@ -637,6 +659,7 @@ function MessagesPanel({
   onSave: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const handleSave = async () => {
     setSaving(true)
     await onSave()
@@ -649,7 +672,7 @@ function MessagesPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <MessageSquare className="h-4 w-4" /> Mensagens
         </CardTitle>
-        <CardDescription>Configurações de reações, filas, prefixo e texto-para-fala</CardDescription>
+        <CardDescription>Como o assistente reage e responde às mensagens. Os padrões funcionam bem para a maioria dos casos.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -662,18 +685,20 @@ function MessagesPanel({
               placeholder="Ex: \uD83D\uDC4D"
             />
           </div>
-          <SelectField
-            label="Escopo da reação (ackReactionScope)"
-            helpField="messages.ackReactionScope"
-            value={data.ackReactionScope}
-            onChange={(v) => onChange({ ...data, ackReactionScope: v })}
-            options={[
-              { value: 'all', label: 'Todas' },
-              { value: 'group-mentions', label: 'Menções em grupo' },
-              { value: 'groups', label: 'Grupos' },
-              { value: 'none', label: 'Nenhuma' },
-            ]}
-          />
+          <div>
+            <LH text="Histórico em grupos" field="messages.groupChat.historyLimit" />
+            <p className="text-xs text-muted-foreground mt-0.5">Mensagens recentes a incluir como contexto em grupos</p>
+            <Input
+              className="mt-1"
+              type="number"
+              min={1}
+              max={500}
+              value={data.groupChat.historyLimit}
+              onChange={(e) =>
+                onChange({ ...data, groupChat: { ...data.groupChat, historyLimit: Number(e.target.value) } })
+              }
+            />
+          </div>
           <div className="sm:col-span-2">
             <CheckboxField
               label="Remover reação após resposta"
@@ -697,20 +722,30 @@ function MessagesPanel({
           </div>
         </div>
 
+        <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+        {showAdvanced && (<>
+        <div className="border-t border-border pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SelectField
+              label={tLabel('ackReactionScope')}
+              helpField="messages.ackReactionScope"
+              value={data.ackReactionScope}
+              onChange={(v) => onChange({ ...data, ackReactionScope: v })}
+              options={tOptions(['all', 'group-mentions', 'groups', 'none'], 'messages.ackReactionScope')}
+            />
+          </div>
+        </div>
+
         <div className="border-t border-border pt-4">
           <p className="text-sm font-medium mb-3">Fila de mensagens</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <SelectField
-              label="Modo da fila (queue.mode)"
+              label={tLabel('queue.mode')}
               helpField="messages.queue.mode"
               value={data.queue.mode}
               onChange={(v) => onChange({ ...data, queue: { ...data.queue, mode: v } })}
-              options={[
-                { value: 'collect', label: 'Coletar (collect)' },
-                { value: 'steer', label: 'Direcionar (steer)' },
-                { value: 'followup', label: 'Follow-up' },
-                { value: 'interrupt', label: 'Interromper (interrupt)' },
-              ]}
+              options={tOptions(['collect', 'steer', 'followup', 'interrupt'], 'messages.queue.mode')}
             />
             <div>
               <LH text="Espera antes de processar (ms)" field="messages.queue.debounceMs" />
@@ -740,16 +775,12 @@ function MessagesPanel({
               />
             </div>
             <SelectField
-              label="Descarte (queue.drop)"
+              label={tLabel('queue.drop')}
               helpField="messages.queue.drop"
               description="Ação quando a fila atinge a capacidade"
               value={data.queue.drop}
               onChange={(v) => onChange({ ...data, queue: { ...data.queue, drop: v } })}
-              options={[
-                { value: 'old', label: 'Antigas (old)' },
-                { value: 'new', label: 'Novas (new)' },
-                { value: 'summarize', label: 'Resumir (summarize)' },
-              ]}
+              options={tOptions(['old', 'new', 'summarize'], 'messages.queue.drop')}
             />
           </div>
         </div>
@@ -775,52 +806,24 @@ function MessagesPanel({
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-3">Chat em Grupo</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <LH text="Histórico em grupos" field="messages.groupChat.historyLimit" />
-              <p className="text-xs text-muted-foreground mt-0.5">Mensagens recentes a incluir como contexto em grupos</p>
-              <Input
-                className="mt-1"
-                type="number"
-                min={1}
-                max={500}
-                value={data.groupChat.historyLimit}
-                onChange={(e) =>
-                  onChange({ ...data, groupChat: { ...data.groupChat, historyLimit: Number(e.target.value) } })
-                }
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-border pt-4">
           <p className="text-sm font-medium mb-3">Texto para Fala (TTS)</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <SelectField
-              label="Auto TTS (tts.auto)"
+              label={tLabel('tts.auto')}
               helpField="messages.tts.auto"
               value={data.tts.auto}
               onChange={(v) => onChange({ ...data, tts: { ...data.tts, auto: v } })}
-              options={[
-                { value: 'off', label: 'Desligado' },
-                { value: 'always', label: 'Sempre' },
-                { value: 'inbound', label: 'Mensagens recebidas' },
-                { value: 'tagged', label: 'Marcadas' },
-              ]}
+              options={tOptions(['off', 'always', 'inbound', 'tagged'], 'messages.tts.auto')}
             />
             <SelectField
-              label="Modo TTS (tts.mode)"
+              label={tLabel('tts.mode')}
               helpField="messages.tts.mode"
               value={data.tts.mode}
               onChange={(v) => onChange({ ...data, tts: { ...data.tts, mode: v } })}
-              options={[
-                { value: 'final', label: 'Resposta final' },
-                { value: 'all', label: 'Todas as mensagens' },
-              ]}
+              options={tOptions(['final', 'all'], 'messages.tts.mode')}
             />
             <SelectField
-              label="Provedor TTS (tts.provider)"
+              label={tLabel('tts.provider')}
               helpField="messages.tts.provider"
               value={data.tts.provider}
               onChange={(v) => onChange({ ...data, tts: { ...data.tts, provider: v } })}
@@ -863,6 +866,7 @@ function MessagesPanel({
             </div>
           </div>
         </div>
+        </>)}
 
         <SaveButton onClick={handleSave} saving={saving} />
       </CardContent>
@@ -882,6 +886,7 @@ function SessionPanel({
   onSave: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [newLinkName, setNewLinkName] = useState('')
   const [newLinkAddr, setNewLinkAddr] = useState('')
   const handleSave = async () => {
@@ -920,66 +925,16 @@ function SessionPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <Users className="h-4 w-4" /> Sessões
         </CardTitle>
-        <CardDescription>Escopo, regras de reset, identity links e overrides por tipo</CardDescription>
+        <CardDescription>Controla quando as conversas são reiniciadas. Os padrões funcionam bem para a maioria dos casos.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <SelectField
-            label="Escopo da sessão (scope)"
-            helpField="sessions.scope"
-            description="Define isolamento de contexto entre conversas"
-            value={data.scope}
-            onChange={(v) => onChange({ ...data, scope: v })}
-            options={[
-              { value: 'main', label: 'Principal (main)' },
-              { value: 'per-peer', label: 'Por par (per-peer)' },
-              { value: 'per-channel-peer', label: 'Por canal+par (per-channel-peer)' },
-              { value: 'per-account-channel-peer', label: 'Por conta+canal+par' },
-            ]}
-          />
-          <SelectField
-            label="Escopo DM (dmScope)"
-            helpField="sessions.dmScope"
-            description="Escopo específico para mensagens diretas"
-            value={data.dmScope || ''}
-            onChange={(v) => onChange({ ...data, dmScope: v || null })}
-            options={[
-              { value: '', label: 'Herdar do scope principal' },
-              { value: 'main', label: 'Principal (main)' },
-              { value: 'per-peer', label: 'Por par (per-peer)' },
-              { value: 'per-channel-peer', label: 'Por canal+par (per-channel-peer)' },
-              { value: 'per-account-channel-peer', label: 'Por conta+canal+par' },
-            ]}
-          />
-          <div>
-            <LH text="Nome da conversa principal" field="sessions.mainKey" />
-            <p className="text-xs text-muted-foreground mt-0.5">Identificador da sessão principal</p>
-            <Input
-              className="mt-1"
-              value={data.mainKey}
-              onChange={(e) => onChange({ ...data, mainKey: e.target.value })}
-              placeholder="main"
-            />
-          </div>
-          <div>
-            <LH text="Local de armazenamento" field="sessions.store" />
-            <p className="text-xs text-muted-foreground mt-0.5">Path de armazenamento de sessões</p>
-            <Input
-              className="mt-1"
-              value={data.store}
-              onChange={(e) => onChange({ ...data, store: e.target.value })}
-              placeholder="Ex: /data/sessions"
-            />
-          </div>
-          <SelectField
-            label="Modo de reset (reset.mode)"
+            label={tLabel('reset.mode')}
             helpField="sessions.reset.mode"
             value={data.reset.mode}
             onChange={(v) => onChange({ ...data, reset: { ...data.reset, mode: v } })}
-            options={[
-              { value: 'daily', label: 'Diário' },
-              { value: 'idle', label: 'Por inatividade' },
-            ]}
+            options={tOptions(['daily', 'idle'], 'session.reset.mode')}
           />
           {data.reset.mode === 'daily' && (
             <div>
@@ -1010,6 +965,67 @@ function SessionPanel({
               />
             </div>
           )}
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <p className="text-sm font-medium mb-1">Reset Triggers</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            Comandos que resetam a sessão (ex: /new, /reset)
+          </p>
+          <TagInput
+            label=""
+            values={data.reset.resetTriggers}
+            onChange={(v) => onChange({ ...data, reset: { ...data.reset, resetTriggers: v } })}
+            placeholder="/comando (Enter para adicionar)"
+          />
+        </div>
+
+        <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+        {showAdvanced && (<>
+        <div className="border-t border-border pt-4">
+          <p className="text-sm font-medium mb-3">Escopo e Armazenamento</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <SelectField
+              label={tLabel('scope')}
+              helpField="sessions.scope"
+              description="Escopo de sessão padrão"
+              value={data.scope}
+              onChange={(v) => onChange({ ...data, scope: v })}
+              options={tOptions(['main', 'thread', 'channel'], 'session.scope')}
+            />
+            <SelectField
+              label={tLabel('dmScope')}
+              helpField="sessions.dmScope"
+              description="Escopo de sessão em conversas privadas"
+              value={data.dmScope || ''}
+              onChange={(v) => onChange({ ...data, dmScope: v || null })}
+              options={[
+                { value: '', label: 'Herdar do escopo principal' },
+                ...tOptions(['main', 'thread', 'channel'], 'session.scope'),
+              ]}
+            />
+            <div>
+              <LH text="Chave principal" field="sessions.mainKey" />
+              <p className="text-xs text-muted-foreground mt-0.5">Identificador da sessão principal</p>
+              <Input
+                className="mt-1"
+                value={data.mainKey}
+                onChange={(e) => onChange({ ...data, mainKey: e.target.value })}
+                placeholder="main"
+              />
+            </div>
+            <div>
+              <LH text="Store" field="sessions.store" />
+              <p className="text-xs text-muted-foreground mt-0.5">Backend de armazenamento de sessões</p>
+              <Input
+                className="mt-1"
+                value={data.store}
+                onChange={(e) => onChange({ ...data, store: e.target.value })}
+                placeholder="Padrão do sistema"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="border-t border-border pt-4">
@@ -1129,19 +1145,6 @@ function SessionPanel({
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-1">Reset Triggers</p>
-          <p className="text-xs text-muted-foreground mb-3">
-            Comandos que resetam a sessão (ex: /new, /reset)
-          </p>
-          <TagInput
-            label=""
-            values={data.reset.resetTriggers}
-            onChange={(v) => onChange({ ...data, reset: { ...data.reset, resetTriggers: v } })}
-            placeholder="/comando (Enter para adicionar)"
-          />
-        </div>
-
-        <div className="border-t border-border pt-4">
           <p className="text-sm font-medium mb-1">Agent-to-Agent</p>
           <p className="text-xs text-muted-foreground mb-3">
             Configurações de comunicação entre agentes
@@ -1161,15 +1164,12 @@ function SessionPanel({
               />
             </div>
             <SelectField
-              label="Send Policy padrão"
+              label={tLabel('sendPolicy.default_')}
               helpField="sessions.sendPolicy.default"
               description="Política padrão de envio de mensagens"
               value={data.sendPolicy.default_}
               onChange={(v) => onChange({ ...data, sendPolicy: { ...data.sendPolicy, default_: v } })}
-              options={[
-                { value: 'allow', label: 'Permitir (allow)' },
-                { value: 'deny', label: 'Negar (deny)' },
-              ]}
+              options={tOptions(['allow', 'deny'])}
             />
             <div className="sm:col-span-2">
               <LH text="Regras de roteamento" field="sessions.sendPolicy.rules" />
@@ -1183,6 +1183,7 @@ function SessionPanel({
             </div>
           </div>
         </div>
+        </>)}
 
         <SaveButton onClick={handleSave} saving={saving} />
       </CardContent>
@@ -1211,6 +1212,7 @@ function AgentsDefaultsPanel({
   onSave: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const handleSave = async () => {
     setSaving(true)
     await onSave()
@@ -1223,23 +1225,16 @@ function AgentsDefaultsPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <Brain className="h-4 w-4" /> Modelo / IA
         </CardTitle>
-        <CardDescription>Padrões de comportamento dos agentes, modelos e fallback chain</CardDescription>
+        <CardDescription>Configurações do modelo de inteligência artificial. Os padrões já estão otimizados.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <SelectField
-            label="Thinking padrão (thinkingDefault)"
+            label={tLabel('thinkingDefault')}
             helpField="ia.thinkingDefault"
             value={data.thinkingDefault}
             onChange={(v) => onChange({ ...data, thinkingDefault: v })}
-            options={[
-              { value: 'xhigh', label: 'Muito alto (xhigh)' },
-              { value: 'high', label: 'Alto' },
-              { value: 'medium', label: 'Médio' },
-              { value: 'low', label: 'Baixo' },
-              { value: 'minimal', label: 'Mínimo' },
-              { value: 'off', label: 'Desligado' },
-            ]}
+            options={tOptions(['xhigh', 'high', 'medium', 'low', 'minimal', 'off'], 'agentsDefaults.thinkingDefault')}
           />
           <div>
             <LH text="Conversas simultâneas" field="ia.maxConcurrent" />
@@ -1263,65 +1258,103 @@ function AgentsDefaultsPanel({
               onChange={(e) => onChange({ ...data, timeoutSeconds: Number(e.target.value) })}
             />
           </div>
-          <div>
-            <LH text="Tamanho do contexto" field="ia.contextTokens" />
-            <p className="text-xs text-muted-foreground mt-0.5">Padrão: 200000. Deixe vazio para padrão.</p>
-            <Input
-              className="mt-1"
-              type="number"
-              min={1000}
-              max={1000000}
-              value={data.contextTokens ?? ''}
-              onChange={(e) => {
-                const val = e.target.value === '' ? null : Number(e.target.value)
-                onChange({ ...data, contextTokens: val })
-              }}
-              placeholder="200000"
-            />
-          </div>
-          <div>
-            <LH text="Tamanho de envio parcial" field="ia.blockStreamingChunk" />
-            <Input
-              className="mt-1"
-              type="number"
-              min={100}
-              max={5000}
-              value={data.blockStreamingChunk}
-              onChange={(e) => onChange({ ...data, blockStreamingChunk: Number(e.target.value) })}
-            />
-          </div>
-          <div>
-            <LH text="Modelo de imagem" field="ia.imageModel" />
-            <Input
-              className="mt-1"
-              value={data.imageModel}
-              onChange={(e) => onChange({ ...data, imageModel: e.target.value })}
-              placeholder="Ex: dall-e-3"
-            />
-          </div>
-          <div className="flex items-end">
-            <CheckboxField
-              label="Bloquear streaming por padrão"
-              helpField="ia.blockStreaming"
-              description="Envia resposta completa ao invés de streaming"
-              checked={data.blockStreamingDefault}
-              onChange={(v) => onChange({ ...data, blockStreamingDefault: v })}
-            />
-          </div>
-          <div className="flex items-end">
-            <CheckboxField
-              label="Verbose por padrão (verboseDefault)"
-              helpField="ia.verboseDefault"
-              description="Modo detalhado para respostas dos agentes"
-              checked={data.verboseDefault}
-              onChange={(v) => onChange({ ...data, verboseDefault: v })}
-            />
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <TagInput
+            label="Modelos alternativos"
+            helpField="ia.fallbackChain"
+            description="Lista ordenada de modelos substitutos (ex: opus, sonnet, gpt). O primeiro é o principal."
+            values={data.fallbackChain}
+            onChange={(v) => onChange({ ...data, fallbackChain: v })}
+            placeholder="Alias ou ID do modelo"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SelectField
+            label={tLabel('typingMode')}
+            helpField="ia.typingMode"
+            description="Quando mostrar indicador de digitação"
+            value={data.typingMode}
+            onChange={(v) => onChange({ ...data, typingMode: v })}
+            options={tOptions(['never', 'instant', 'thinking', 'message'], 'agentsDefaults.typingMode')}
+          />
+          <SelectField
+            label={tLabel('humanDelay.mode')}
+            helpField="ia.humanDelay"
+            description="Simula atraso humano nas respostas"
+            value={data.humanDelay.mode}
+            onChange={(v) => onChange({ ...data, humanDelay: { mode: v } })}
+            options={tOptions(['off', 'natural', 'custom'], 'agentsDefaults.humanDelay.mode')}
+          />
+        </div>
+
+        <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+        {showAdvanced && (<>
+        <div className="border-t border-border pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <LH text="Tamanho do contexto" field="ia.contextTokens" />
+              <p className="text-xs text-muted-foreground mt-0.5">Padrão: 200000. Deixe vazio para padrão.</p>
+              <Input
+                className="mt-1"
+                type="number"
+                min={1000}
+                max={1000000}
+                value={data.contextTokens ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? null : Number(e.target.value)
+                  onChange({ ...data, contextTokens: val })
+                }}
+                placeholder="200000"
+              />
+            </div>
+            <div>
+              <LH text="Tamanho de envio parcial" field="ia.blockStreamingChunk" />
+              <Input
+                className="mt-1"
+                type="number"
+                min={100}
+                max={5000}
+                value={data.blockStreamingChunk}
+                onChange={(e) => onChange({ ...data, blockStreamingChunk: Number(e.target.value) })}
+              />
+            </div>
+            <div>
+              <LH text="Modelo de imagem" field="ia.imageModel" />
+              <Input
+                className="mt-1"
+                value={data.imageModel}
+                onChange={(e) => onChange({ ...data, imageModel: e.target.value })}
+                placeholder="Ex: dall-e-3"
+              />
+            </div>
+            <div className="flex items-end">
+              <CheckboxField
+                label="Enviar resposta completa"
+                helpField="ia.blockStreaming"
+                description="Envia resposta completa ao invés de streaming"
+                checked={data.blockStreamingDefault}
+                onChange={(v) => onChange({ ...data, blockStreamingDefault: v })}
+              />
+            </div>
+            <div className="flex items-end">
+              <CheckboxField
+                label="Modo detalhado"
+                helpField="ia.verboseDefault"
+                description="Modo detalhado para respostas dos agentes"
+                checked={data.verboseDefault}
+                onChange={(v) => onChange({ ...data, verboseDefault: v })}
+              />
+            </div>
           </div>
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-1">Heartbeat</p>
-          <p className="text-xs text-muted-foreground mb-3">Execução periódica automática do agente principal</p>
+          <p className="text-sm font-medium mb-1">Verificação periódica</p>
+          <p className="text-xs text-muted-foreground mb-3">Execução automática do agente em intervalos regulares</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <LH text="Frequência do heartbeat" field="ia.heartbeat.every" />
@@ -1357,17 +1390,6 @@ function AgentsDefaultsPanel({
               />
             </div>
           </div>
-        </div>
-
-        <div className="border-t border-border pt-4">
-          <TagInput
-            label="Fallback Chain"
-            helpField="ia.fallbackChain"
-            description="Lista ordenada de modelos fallback (ex: opus, sonnet, gpt). O primeiro é o principal."
-            values={data.fallbackChain}
-            onChange={(v) => onChange({ ...data, fallbackChain: v })}
-            placeholder="Alias ou ID do modelo"
-          />
         </div>
 
         <div className="border-t border-border pt-4">
@@ -1413,15 +1435,11 @@ function AgentsDefaultsPanel({
               />
             </div>
             <SelectField
-              label="Formato de hora (timeFormat)"
+              label={tLabel('timeFormat')}
               helpField="ia.timeFormat"
               value={data.timeFormat}
               onChange={(v) => onChange({ ...data, timeFormat: v })}
-              options={[
-                { value: 'auto', label: 'Auto' },
-                { value: '12', label: '12 horas' },
-                { value: '24', label: '24 horas' },
-              ]}
+              options={tOptions(['auto', '12', '24'], 'agentsDefaults.timeFormat')}
             />
             <div>
               <LH text="Tamanho máximo de mídia (MB)" field="ia.mediaMaxMb" />
@@ -1436,7 +1454,7 @@ function AgentsDefaultsPanel({
             </div>
             <div className="flex items-end">
               <CheckboxField
-                label="Pular bootstrap (skipBootstrap)"
+                label="Pular inicialização"
                 helpField="ia.skipBootstrap"
                 description="Ignora o carregamento inicial de contexto"
                 checked={data.skipBootstrap}
@@ -1444,15 +1462,12 @@ function AgentsDefaultsPanel({
               />
             </div>
             <SelectField
-              label="Elevated padrão"
+              label={tLabel('elevatedDefault')}
               helpField="ia.elevatedDefault"
               description="Permissões elevadas por padrão"
               value={data.elevatedDefault}
               onChange={(v) => onChange({ ...data, elevatedDefault: v })}
-              options={[
-                { value: 'on', label: 'Ligado' },
-                { value: 'off', label: 'Desligado' },
-              ]}
+              options={tOptions(['on', 'off'])}
             />
           </div>
         </div>
@@ -1461,50 +1476,30 @@ function AgentsDefaultsPanel({
           <p className="text-sm font-medium mb-3">Comportamento de Resposta</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <SelectField
-              label="Context Pruning (mode)"
+              label={tLabel('contextPruning.mode')}
               helpField="ia.contextPruning"
               description="Modo de poda de contexto para conversas longas"
               value={data.contextPruning.mode}
               onChange={(v) => onChange({ ...data, contextPruning: { mode: v } })}
-              options={[
-                { value: 'off', label: 'Desligado' },
-                { value: 'adaptive', label: 'Adaptativo' },
-                { value: 'aggressive', label: 'Agressivo' },
-              ]}
+              options={tOptions(['off', 'adaptive', 'aggressive'], 'agentsDefaults.contextPruning.mode')}
             />
             <SelectField
-              label="Compaction (mode)"
+              label={tLabel('compaction.mode')}
               helpField="ia.compaction"
               description="Modo de compactação de contexto"
               value={data.compaction.mode}
               onChange={(v) => onChange({ ...data, compaction: { ...data.compaction, mode: v } })}
-              options={[
-                { value: 'default', label: 'Padrão' },
-                { value: 'safeguard', label: 'Safeguard' },
-              ]}
+              options={tOptions(['default', 'safeguard'], 'agentsDefaults.compaction.mode')}
             />
             <div className="flex items-end">
               <CheckboxField
-                label="Memory flush habilitado"
+                label="Salvar memória ao compactar"
                 helpField="ia.memoryFlush"
                 description="Flush de memória durante compactação"
                 checked={data.compaction.memoryFlushEnabled}
                 onChange={(v) => onChange({ ...data, compaction: { ...data.compaction, memoryFlushEnabled: v } })}
               />
             </div>
-            <SelectField
-              label="Modo de digitação (typingMode)"
-              helpField="ia.typingMode"
-              description="Quando mostrar indicador de digitação"
-              value={data.typingMode}
-              onChange={(v) => onChange({ ...data, typingMode: v })}
-              options={[
-                { value: 'never', label: 'Nunca' },
-                { value: 'instant', label: 'Instantâneo' },
-                { value: 'thinking', label: 'Pensando' },
-                { value: 'message', label: 'Mensagem' },
-              ]}
-            />
             <div>
               <LH text="Frequência do digitando (s)" field="ia.typingInterval" />
               <Input
@@ -1516,18 +1511,6 @@ function AgentsDefaultsPanel({
                 onChange={(e) => onChange({ ...data, typingIntervalSeconds: Number(e.target.value) })}
               />
             </div>
-            <SelectField
-              label="Human delay (mode)"
-              helpField="ia.humanDelay"
-              description="Simula atraso humano nas respostas"
-              value={data.humanDelay.mode}
-              onChange={(v) => onChange({ ...data, humanDelay: { mode: v } })}
-              options={[
-                { value: 'off', label: 'Desligado' },
-                { value: 'natural', label: 'Natural' },
-                { value: 'custom', label: 'Custom' },
-              ]}
-            />
           </div>
         </div>
 
@@ -1589,6 +1572,7 @@ function AgentsDefaultsPanel({
             </table>
           </div>
         </div>
+        </>)}
 
         <SaveButton onClick={handleSave} saving={saving} />
       </CardContent>
@@ -1600,19 +1584,125 @@ function AgentsDefaultsPanel({
 
 const profileDescriptions: Record<string, string> = {
   minimal: 'Apenas ferramentas essenciais. Ideal para bots simples.',
-  coding: 'Inclui ferramentas de execução de código e filesystem.',
+  coding: 'Inclui ferramentas de execução de código e arquivos.',
   messaging: 'Otimizado para bots de mensageria com integrações.',
-  full: 'Todas as ferramentas disponíveis habilitadas.',
+  full: 'Todas as ferramentas disponíveis.',
 }
 
 const toolGroups = [
-  { value: 'group:fs', label: 'Filesystem (group:fs)' },
-  { value: 'group:runtime', label: 'Runtime (group:runtime)' },
-  { value: 'group:sessions', label: 'Sessions (group:sessions)' },
-  { value: 'group:memory', label: 'Memory (group:memory)' },
-  { value: 'group:web', label: 'Web (group:web)' },
-  { value: 'group:ui', label: 'UI (group:ui)' },
+  { value: 'group:fs', label: tGroup('group:fs') },
+  { value: 'group:runtime', label: tGroup('group:runtime') },
+  { value: 'group:sessions', label: tGroup('group:sessions') },
+  { value: 'group:memory', label: tGroup('group:memory') },
+  { value: 'group:web', label: tGroup('group:web') },
+  { value: 'group:ui', label: tGroup('group:ui') },
 ]
+
+const SUGGESTED_BINS = [
+  'wget', 'node', 'npm', 'npx', 'pip3', 'git',
+  'docker', 'ffmpeg', 'openssl', 'systemctl', 'tar',
+  'unzip', 'ssh', 'scp', 'rsync', 'jq', 'sed', 'awk',
+  'chmod', 'chown', 'touch', 'rm', 'wc', 'sort', 'diff',
+  'python3', 'curl', 'ls', 'cat', 'head', 'tail', 'grep',
+  'find', 'df', 'free', 'mkdir', 'cp', 'mv',
+]
+
+function ExecSafeBinsEditor({
+  safeBins,
+  onChange,
+}: {
+  safeBins: string[]
+  onChange: (bins: string[]) => void
+}) {
+  const [newBin, setNewBin] = useState('')
+
+  const addBin = (bin: string) => {
+    const trimmed = bin.trim().toLowerCase()
+    if (!trimmed || safeBins.includes(trimmed)) return
+    if (!/^[a-zA-Z0-9._\/-]+$/.test(trimmed)) return
+    onChange([...safeBins, trimmed])
+    setNewBin('')
+  }
+
+  const removeBin = (bin: string) => {
+    onChange(safeBins.filter((b) => b !== bin))
+  }
+
+  const suggestions = SUGGESTED_BINS.filter((b) => !safeBins.includes(b))
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-xs font-medium text-muted-foreground mb-2">Programas na lista ({safeBins.length})</p>
+        {safeBins.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">Nenhum programa na lista. Adicione abaixo.</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {safeBins.map((bin) => (
+              <span
+                key={bin}
+                className="inline-flex items-center gap-1 px-2 py-1 sm:py-0.5 rounded-md text-xs font-mono bg-primary/10 text-primary border border-primary/20"
+              >
+                {bin}
+                <button
+                  type="button"
+                  onClick={() => removeBin(bin)}
+                  className="ml-0.5 p-0.5 -mr-0.5 hover:text-red-500 active:text-red-600 transition-colors rounded"
+                  title={`Remover ${bin}`}
+                >
+                  <X className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Input
+          className="flex-1 font-mono text-sm sm:text-xs h-10 sm:h-9"
+          placeholder="Nome do programa (ex: wget)"
+          value={newBin}
+          onChange={(e) => setNewBin(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              addBin(newBin)
+            }
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-10 sm:h-9 w-full sm:w-auto shrink-0"
+          onClick={() => addBin(newBin)}
+          disabled={!newBin.trim()}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
+        </Button>
+      </div>
+
+      {suggestions.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5">Sugestões</p>
+          <div className="flex flex-wrap gap-1.5 sm:gap-1">
+            {suggestions.slice(0, 20).map((bin) => (
+              <button
+                key={bin}
+                type="button"
+                onClick={() => addBin(bin)}
+                className="px-2.5 py-1.5 sm:px-2 sm:py-0.5 rounded text-xs sm:text-[11px] font-mono border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 active:bg-primary/10 transition-colors"
+              >
+                + {bin}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function ToolsPanel({
   data,
@@ -1624,6 +1714,7 @@ function ToolsPanel({
   onSave: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const handleSave = async () => {
     setSaving(true)
     await onSave()
@@ -1645,29 +1736,161 @@ function ToolsPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <Wrench className="h-4 w-4" /> Ferramentas
         </CardTitle>
-        <CardDescription>Perfil, allow/deny lists, grupos e permissões elevadas</CardDescription>
+        <CardDescription>O que o assistente pode fazer: quais ferramentas, programas e acessos estão liberados.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <SelectField
-              label="Perfil de ferramentas (profile)"
+              label={tLabel('profile')}
               helpField="tools.profile"
               description={profileDescriptions[data.profile] || ''}
               value={data.profile}
               onChange={(v) => onChange({ ...data, profile: v })}
-              options={[
-                { value: 'minimal', label: 'Minimal' },
-                { value: 'coding', label: 'Coding' },
-                { value: 'messaging', label: 'Messaging' },
-                { value: 'full', label: 'Full' },
-              ]}
+              options={tOptions(['minimal', 'coding', 'messaging', 'full'], 'tools.profile')}
             />
           </div>
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-1">Allow List</p>
+          <div className="flex items-center gap-2 mb-1">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <p className="text-sm font-medium">Programas Permitidos</p>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            Controle quais programas o agente pode usar no terminal do container
+          </p>
+
+          {/* Modo de segurança */}
+          <p className="text-xs font-medium text-muted-foreground mb-2">Modo de segurança</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+            {([
+              { value: 'allowlist', label: 'Lista fixa', desc: 'Só os programas da lista abaixo', icon: ShieldCheck, color: 'text-green-600 dark:text-green-400' },
+              { value: 'full', label: 'Liberado', desc: 'Pode executar qualquer programa', icon: AlertTriangle, color: 'text-yellow-600 dark:text-yellow-400' },
+              { value: 'off', label: 'Bloqueado', desc: 'Não pode executar nada', icon: Ban, color: 'text-red-600 dark:text-red-400' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onChange({ ...data, exec: { ...data.exec, security: opt.value } })}
+                className={cn(
+                  'flex items-center sm:items-start gap-2 sm:gap-2.5 p-2.5 sm:p-3 rounded-lg border text-left transition-all min-w-0',
+                  data.exec.security === opt.value
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                    : 'border-border hover:border-foreground/20',
+                )}
+              >
+                <opt.icon className={cn('h-4 w-4 shrink-0', data.exec.security === opt.value ? opt.color : 'text-muted-foreground')} />
+                <div className="min-w-0">
+                  <p className={cn('text-xs sm:text-sm font-medium', data.exec.security === opt.value ? '' : 'text-muted-foreground')}>{opt.label}</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight mt-0.5 hidden sm:block">{opt.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Aviso quando liberado */}
+          {data.exec.security === 'full' && (
+            <div className="flex items-start gap-2 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/5 mb-4">
+              <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                O agente pode executar qualquer programa no terminal. Use apenas se confiar totalmente nas ações do agente.
+              </p>
+            </div>
+          )}
+
+          {data.exec.security === 'off' && (
+            <div className="flex items-start gap-2 p-3 rounded-lg border border-border bg-muted/50 mb-4">
+              <Ban className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                O agente não pode executar nenhum programa no terminal.
+              </p>
+            </div>
+          )}
+
+          {/* Comportamento de aprovação — só visível se não bloqueado */}
+          {data.exec.security !== 'off' && (
+            <>
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                {data.exec.security === 'allowlist' ? 'Quando o agente tenta usar algo fora da lista' : 'Aprovação de comandos'}
+              </p>
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {([
+                  { value: 'on-miss', label: 'Pede aprovação', desc: 'Pede sua permissão para comandos novos' },
+                  { value: 'always', label: 'Sempre pede', desc: 'Pede permissão para tudo' },
+                  { value: 'never', label: 'Nunca pede', desc: 'Executa sem perguntar' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onChange({ ...data, exec: { ...data.exec, ask: opt.value } })}
+                    className={cn(
+                      'px-2 sm:px-3 py-2 sm:py-1.5 rounded-md text-[11px] sm:text-xs border transition-colors text-center',
+                      data.exec.ask === opt.value
+                        ? 'bg-primary/10 border-primary/30 text-primary font-medium'
+                        : 'border-border text-muted-foreground hover:border-foreground/20',
+                    )}
+                    title={opt.desc}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Lista de programas — só visível se allowlist */}
+          {data.exec.security === 'allowlist' && (
+            <ExecSafeBinsEditor
+              safeBins={data.exec.safeBins}
+              onChange={(bins) => onChange({ ...data, exec: { ...data.exec, safeBins: bins } })}
+            />
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <CheckboxField
+            label="Busca na internet"
+            helpField="tools.web.search"
+            description="Permite ao agente realizar buscas na internet"
+            checked={data.web.searchEnabled}
+            onChange={(v) => onChange({ ...data, web: { ...data.web, searchEnabled: v } })}
+          />
+          <CheckboxField
+            label="Acessar páginas web"
+            helpField="tools.web.fetch"
+            description="Permite ao agente acessar URLs diretamente"
+            checked={data.web.fetchEnabled}
+            onChange={(v) => onChange({ ...data, web: { ...data.web, fetchEnabled: v } })}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <CheckboxField
+            label="Processar imagens"
+            helpField="tools.media.image"
+            checked={data.media.imageEnabled}
+            onChange={(v) => onChange({ ...data, media: { ...data.media, imageEnabled: v } })}
+          />
+          <CheckboxField
+            label="Processar áudios"
+            helpField="tools.media.audio"
+            checked={data.media.audioEnabled}
+            onChange={(v) => onChange({ ...data, media: { ...data.media, audioEnabled: v } })}
+          />
+          <CheckboxField
+            label="Processar vídeos"
+            helpField="tools.media.video"
+            checked={data.media.videoEnabled}
+            onChange={(v) => onChange({ ...data, media: { ...data.media, videoEnabled: v } })}
+          />
+        </div>
+
+        <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+        {showAdvanced && (<>
+        <div className="border-t border-border pt-4">
+          <p className="text-sm font-medium mb-1">Lista de permitidos</p>
           <p className="text-xs text-muted-foreground mb-3">
             Ferramentas ou grupos permitidos explicitamente (sobrepõe o perfil)
           </p>
@@ -1697,7 +1920,7 @@ function ToolsPanel({
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-1">Deny List</p>
+          <p className="text-sm font-medium mb-1">Lista de bloqueados</p>
           <p className="text-xs text-muted-foreground mb-3">
             Ferramentas ou grupos bloqueados explicitamente
           </p>
@@ -1727,7 +1950,7 @@ function ToolsPanel({
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-3">Execução (tools.exec)</p>
+          <p className="text-sm font-medium mb-3">Tempos de execução</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <LH text="Tempo em segundo plano (ms)" field="tools.exec.backgroundMs" />
@@ -1765,7 +1988,7 @@ function ToolsPanel({
             </div>
             <div className="flex items-end">
               <CheckboxField
-                label="Apply patch"
+                label="Permitir aplicar correções"
                 helpField="tools.exec.applyPatch"
                 description="Habilitar apply-patch via exec"
                 checked={data.exec.applyPatchEnabled}
@@ -1776,24 +1999,10 @@ function ToolsPanel({
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-3">Web (busca e fetch expandido)</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <p className="text-sm font-medium mb-3">Web (detalhes avançados)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <CheckboxField
-              label="Busca web habilitada"
-              helpField="tools.web.search"
-              description="Permite ao agente realizar buscas na internet"
-              checked={data.web.searchEnabled}
-              onChange={(v) => onChange({ ...data, web: { ...data.web, searchEnabled: v } })}
-            />
-            <CheckboxField
-              label="Fetch web habilitado"
-              helpField="tools.web.fetch"
-              description="Permite ao agente acessar URLs diretamente"
-              checked={data.web.fetchEnabled}
-              onChange={(v) => onChange({ ...data, web: { ...data.web, fetchEnabled: v } })}
-            />
-            <CheckboxField
-              label="Readability habilitado"
+              label="Extrair conteúdo principal"
               helpField="tools.web.readability"
               description="Extrai conteúdo principal de páginas (web.fetch.readability)"
               checked={data.web.fetchReadability}
@@ -1835,8 +2044,8 @@ function ToolsPanel({
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-3">Mídia (tools.media)</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <p className="text-sm font-medium mb-3">Mídia (concorrência)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <LH text="Mídias simultâneas" field="tools.media.concurrency" />
               <Input
@@ -1848,32 +2057,14 @@ function ToolsPanel({
                 onChange={(e) => onChange({ ...data, media: { ...data.media, concurrency: Number(e.target.value) } })}
               />
             </div>
-            <CheckboxField
-              label="Imagem habilitada"
-              helpField="tools.media.image"
-              checked={data.media.imageEnabled}
-              onChange={(v) => onChange({ ...data, media: { ...data.media, imageEnabled: v } })}
-            />
-            <CheckboxField
-              label="Áudio habilitado"
-              helpField="tools.media.audio"
-              checked={data.media.audioEnabled}
-              onChange={(v) => onChange({ ...data, media: { ...data.media, audioEnabled: v } })}
-            />
-            <CheckboxField
-              label="Vídeo habilitado"
-              helpField="tools.media.video"
-              checked={data.media.videoEnabled}
-              onChange={(v) => onChange({ ...data, media: { ...data.media, videoEnabled: v } })}
-            />
           </div>
         </div>
 
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-3">Agent-to-Agent (tools.agentToAgent)</p>
+          <p className="text-sm font-medium mb-3">Comunicação entre agentes</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <CheckboxField
-              label="Comunicação entre agentes habilitada"
+              label="Comunicação entre agentes"
               helpField="tools.agentToAgent"
               description="Permite que agentes se comuniquem diretamente"
               checked={data.agentToAgent.enabled}
@@ -1882,7 +2073,7 @@ function ToolsPanel({
             {data.agentToAgent.enabled && (
               <div className="sm:col-span-2">
                 <TagInput
-                  label="Agentes permitidos (allow)"
+                  label="Agentes permitidos"
                   helpField="tools.agentToAgent.allow"
                   description="IDs de agentes que podem se comunicar"
                   values={data.agentToAgent.allow}
@@ -1899,7 +2090,7 @@ function ToolsPanel({
             <Shield className="h-4 w-4" /> Ferramentas elevadas
           </p>
           <CheckboxField
-            label="Ferramentas elevadas habilitadas (elevated.enabled)"
+            label="Ferramentas elevadas"
             helpField="tools.elevated"
             description="Habilita ferramentas que requerem permissões especiais (ex: execução de código, acesso filesystem)"
             checked={data.elevated.enabled}
@@ -1908,7 +2099,7 @@ function ToolsPanel({
           {data.elevated.enabled && (
             <div className="mt-3">
               <TagInput
-                label="Permitir de (elevated.allowFrom)"
+                label="Permitido para"
                 helpField="tools.elevated.allowFrom"
                 description="IDs de canal/conta com acesso elevado (E.164 para WhatsApp, IDs para Telegram/Discord)"
                 values={data.elevated.allowFrom}
@@ -1954,6 +2145,7 @@ function ToolsPanel({
             </div>
           </div>
         </div>
+        </>)}
 
         <SaveButton onClick={handleSave} saving={saving} />
       </CardContent>
@@ -1973,6 +2165,7 @@ function LoggingPanel({
   onSave: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const handleSave = async () => {
     setSaving(true)
     await onSave()
@@ -1985,67 +2178,58 @@ function LoggingPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <FileText className="h-4 w-4" /> Logging
         </CardTitle>
-        <CardDescription>Nível de log, formato, redação de dados sensíveis e padrões de redação</CardDescription>
+        <CardDescription>Controla o nível de detalhe dos registros do sistema. O padrão é suficiente para uso normal.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <SelectField
-            label="Nível de log (level)"
-            helpField="logging.level"
-            value={data.level}
-            onChange={(v) => onChange({ ...data, level: v })}
-            options={[
-              { value: 'debug', label: 'Debug' },
-              { value: 'info', label: 'Info' },
-              { value: 'warn', label: 'Warn' },
-              { value: 'error', label: 'Error' },
-            ]}
-          />
-          <SelectField
-            label="Nível console (consoleLevel)"
-            helpField="logging.consoleLevel"
-            description="Sobrescreve o nível apenas para console"
-            value={data.consoleLevel || ''}
-            onChange={(v) => onChange({ ...data, consoleLevel: v || null })}
-            options={[
-              { value: '', label: 'Herdar do level' },
-              { value: 'debug', label: 'Debug' },
-              { value: 'info', label: 'Info' },
-              { value: 'warn', label: 'Warn' },
-              { value: 'error', label: 'Error' },
-            ]}
-          />
-          <SelectField
-            label="Estilo do console (consoleStyle)"
-            helpField="logging.consoleStyle"
-            value={data.consoleStyle}
-            onChange={(v) => onChange({ ...data, consoleStyle: v })}
-            options={[
-              { value: 'pretty', label: 'Pretty' },
-              { value: 'compact', label: 'Compact' },
-              { value: 'json', label: 'JSON' },
-            ]}
-          />
-          <SelectField
-            label="Redatar sensíveis (redactSensitive)"
-            helpField="logging.redactSensitive"
-            description="Controla redação de tokens/chaves nos logs"
-            value={data.redactSensitive}
-            onChange={(v) => onChange({ ...data, redactSensitive: v })}
-            options={[
-              { value: 'tools', label: 'Apenas ferramentas (tools)' },
-              { value: 'off', label: 'Desligado (off)' },
-            ]}
-          />
-          <div className="sm:col-span-2">
-            <LH text="Arquivo de log" field="logging.file" />
-            <p className="text-xs text-muted-foreground mt-0.5">Caminho customizado para o arquivo de log</p>
-            <Input
-              className="mt-1"
-              value={data.file}
-              onChange={(e) => onChange({ ...data, file: e.target.value })}
-              placeholder="Ex: /var/log/openclaw/bot.log"
+        <SelectField
+          label={tLabel('level')}
+          helpField="logging.level"
+          value={data.level}
+          onChange={(v) => onChange({ ...data, level: v })}
+          options={tOptions(['debug', 'info', 'warn', 'error'], 'logging.level')}
+        />
+
+        <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+        {showAdvanced && (<>
+        <div className="border-t border-border pt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <SelectField
+              label={tLabel('consoleLevel')}
+              helpField="logging.consoleLevel"
+              description="Sobrescreve o nível apenas para o terminal"
+              value={data.consoleLevel || ''}
+              onChange={(v) => onChange({ ...data, consoleLevel: v || null })}
+              options={[
+                { value: '', label: 'Herdar do nível principal' },
+                ...tOptions(['debug', 'info', 'warn', 'error'], 'logging.level'),
+              ]}
             />
+            <SelectField
+              label={tLabel('consoleStyle')}
+              helpField="logging.consoleStyle"
+              value={data.consoleStyle}
+              onChange={(v) => onChange({ ...data, consoleStyle: v })}
+              options={tOptions(['pretty', 'compact', 'json'], 'logging.consoleStyle')}
+            />
+            <SelectField
+              label={tLabel('redactSensitive')}
+              helpField="logging.redactSensitive"
+              description="Controla ocultação de tokens e chaves nos registros"
+              value={data.redactSensitive}
+              onChange={(v) => onChange({ ...data, redactSensitive: v })}
+              options={tOptions(['tools', 'off'], 'logging.redactSensitive')}
+            />
+            <div className="sm:col-span-2">
+              <LH text="Arquivo de log" field="logging.file" />
+              <p className="text-xs text-muted-foreground mt-0.5">Caminho customizado para o arquivo de log</p>
+              <Input
+                className="mt-1"
+                value={data.file}
+                onChange={(e) => onChange({ ...data, file: e.target.value })}
+                placeholder="Ex: /var/log/openclaw/bot.log"
+              />
+            </div>
           </div>
         </div>
 
@@ -2064,6 +2248,7 @@ function LoggingPanel({
             placeholder="Ex:\nsk-[a-zA-Z0-9]{20,}\nBEARER [a-zA-Z0-9-._~+/]+"
           />
         </div>
+        </>)}
 
         <SaveButton onClick={handleSave} saving={saving} />
       </CardContent>
@@ -2085,6 +2270,7 @@ function GatewayPanel({
   onAction: (action: 'status' | 'probe' | 'restart') => Promise<void>
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const handleSave = async () => {
     setSaving(true)
@@ -2104,7 +2290,7 @@ function GatewayPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <Radio className="h-4 w-4" /> Gateway
         </CardTitle>
-        <CardDescription>Modo de operação, autenticação, acesso remoto e discovery</CardDescription>
+        <CardDescription>Conexão do assistente com os serviços de mensageria. Altere apenas se souber o que está fazendo.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Action buttons */}
@@ -2152,42 +2338,14 @@ function GatewayPanel({
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <SelectField
-            label="Modo (mode)"
+            label={tLabel('mode')}
             helpField="gateway.mode"
             description="Como o gateway se conecta aos serviços"
             value={data.mode}
             onChange={(v) => onChange({ ...data, mode: v })}
-            options={[
-              { value: 'local', label: 'Local' },
-              { value: 'remote', label: 'Remoto' },
-              { value: 'hybrid', label: 'Híbrido' },
-            ]}
-          />
-          <div>
-            <LH text="Porta de comunicação" field="gateway.port" />
-            <p className="text-xs text-muted-foreground mt-0.5">Porta TCP do gateway</p>
-            <Input
-              className="mt-1"
-              type="number"
-              min={1024}
-              max={65535}
-              value={data.port}
-              onChange={(e) => onChange({ ...data, port: Number(e.target.value) })}
-            />
-          </div>
-          <SelectField
-            label="Bind (bind)"
-            helpField="gateway.bind"
-            description="Interface de rede para escutar conexões"
-            value={data.bind}
-            onChange={(v) => onChange({ ...data, bind: v })}
-            options={[
-              { value: 'loopback', label: 'Loopback (127.0.0.1)' },
-              { value: 'all', label: 'Todas (0.0.0.0)' },
-              { value: 'private', label: 'Privada' },
-            ]}
+            options={tOptions(['local', 'remote', 'hybrid'], 'gateway.mode')}
           />
         </div>
 
@@ -2195,14 +2353,11 @@ function GatewayPanel({
           <p className="text-sm font-medium mb-3">Autenticação</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <SelectField
-              label="Modo de auth (auth.mode)"
+              label={tLabel('auth.mode')}
               helpField="gateway.auth.mode"
               value={data.auth.mode}
               onChange={(v) => onChange({ ...data, auth: { ...data.auth, mode: v } })}
-              options={[
-                { value: 'token', label: 'Token' },
-                { value: 'password', label: 'Senha' },
-              ]}
+              options={tOptions(['token', 'password'], 'gateway.auth.mode')}
             />
             <div>
               <LH text="Token de acesso" field="gateway.auth.token" />
@@ -2214,6 +2369,35 @@ function GatewayPanel({
                 placeholder="Token de autenticação do gateway"
               />
             </div>
+          </div>
+        </div>
+
+        <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+        {showAdvanced && (<>
+        <div className="border-t border-border pt-4">
+          <p className="text-sm font-medium mb-3">Rede</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <LH text="Porta de comunicação" field="gateway.port" />
+              <p className="text-xs text-muted-foreground mt-0.5">Porta TCP do gateway</p>
+              <Input
+                className="mt-1"
+                type="number"
+                min={1024}
+                max={65535}
+                value={data.port}
+                onChange={(e) => onChange({ ...data, port: Number(e.target.value) })}
+              />
+            </div>
+            <SelectField
+              label={tLabel('bind')}
+              helpField="gateway.bind"
+              description="Interface de rede para escutar conexões"
+              value={data.bind}
+              onChange={(v) => onChange({ ...data, bind: v })}
+              options={tOptions(['loopback', 'all', 'private'], 'gateway.bind')}
+            />
           </div>
         </div>
 
@@ -2269,7 +2453,7 @@ function GatewayPanel({
             </div>
             <div className="flex items-end">
               <CheckboxField
-                label="Permitir Tailscale (auth.allowTailscale)"
+                label="Permitir Tailscale"
                 helpField="gateway.auth.allowTailscale"
                 description="Aceitar conexões autenticadas via Tailscale"
                 checked={data.auth.allowTailscale}
@@ -2283,14 +2467,14 @@ function GatewayPanel({
           <p className="text-sm font-medium mb-3">Control UI</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <CheckboxField
-              label="Permitir auth insegura (allowInsecureAuth)"
+              label="Permitir autenticação insegura"
               helpField="gateway.controlUi.allowInsecureAuth"
               description="Permite autenticação sem HTTPS na Control UI"
               checked={data.controlUi.allowInsecureAuth}
               onChange={(v) => onChange({ ...data, controlUi: { ...data.controlUi, allowInsecureAuth: v } })}
             />
             <CheckboxField
-              label="Desabilitar device auth (dangerouslyDisableDeviceAuth)"
+              label="Desabilitar autenticação de dispositivo"
               helpField="gateway.controlUi.dangerouslyDisableDeviceAuth"
               description="PERIGOSO: Desativa autenticação por dispositivo"
               checked={data.controlUi.dangerouslyDisableDeviceAuth}
@@ -2302,28 +2486,20 @@ function GatewayPanel({
         <div className="border-t border-border pt-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <SelectField
-              label="Discovery / mDNS (discovery)"
+              label={tLabel('discovery')}
               helpField="gateway.discovery"
               description="Modo de descoberta de rede local"
               value={data.discovery}
               onChange={(v) => onChange({ ...data, discovery: v })}
-              options={[
-                { value: 'minimal', label: 'Minimal' },
-                { value: 'off', label: 'Desligado' },
-                { value: 'full', label: 'Full' },
-              ]}
+              options={tOptions(['minimal', 'off', 'full'], 'gateway.discovery')}
             />
             <SelectField
-              label="Nodes browser mode"
+              label={tLabel('nodes.browserMode')}
               helpField="gateway.nodes.browser.mode"
               description="Modo do navegador gerenciado por nodes"
               value={data.nodes.browserMode}
               onChange={(v) => onChange({ ...data, nodes: { ...data.nodes, browserMode: v } })}
-              options={[
-                { value: 'off', label: 'Desligado' },
-                { value: 'managed', label: 'Gerenciado' },
-                { value: 'external', label: 'Externo' },
-              ]}
+              options={tOptions(['off', 'managed', 'external'], 'gateway.nodes.browser.mode')}
             />
             <div>
               <LH text="Proxies confiáveis" field="gateway.trustedProxies" />
@@ -2340,6 +2516,7 @@ function GatewayPanel({
             </div>
           </div>
         </div>
+        </>)}
 
         <SaveButton onClick={handleSave} saving={saving} />
       </CardContent>
@@ -2359,6 +2536,7 @@ function CommandsPanel({
   onSave: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const handleSave = async () => {
     setSaving(true)
     await onSave()
@@ -2371,31 +2549,17 @@ function CommandsPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <Terminal className="h-4 w-4" /> Comandos
         </CardTitle>
-        <CardDescription>Configuração de slash commands nativos e acesso por tipo</CardDescription>
+        <CardDescription>Comandos que os usuários podem enviar ao assistente via chat.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <SelectField
-            label="Comandos nativos (commands.native)"
-            helpField="commands.native"
-            description="Modo de comandos nativos do OpenClaw"
-            value={data.native}
-            onChange={(v) => onChange({ ...data, native: v })}
-            options={[
-              { value: 'auto', label: 'Automático' },
-              { value: 'off', label: 'Desligado' },
-            ]}
-          />
-          <div className="flex items-end">
-            <CheckboxField
-              label="Usar grupos de acesso"
-              helpField="commands.useAccessGroups"
-              description="Restringe comandos por grupo de acesso (useAccessGroups)"
-              checked={data.useAccessGroups}
-              onChange={(v) => onChange({ ...data, useAccessGroups: v })}
-            />
-          </div>
-        </div>
+        <SelectField
+          label={tLabel('native')}
+          helpField="commands.native"
+          description="Modo de comandos nativos do OpenClaw"
+          value={data.native}
+          onChange={(v) => onChange({ ...data, native: v })}
+          options={tOptions(['auto', 'off'], 'commands.native')}
+        />
 
         <div className="border-t border-border pt-4">
           <p className="text-sm font-medium mb-3">Comandos habilitados</p>
@@ -2438,6 +2602,20 @@ function CommandsPanel({
           </div>
         </div>
 
+        <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+        {showAdvanced && (<>
+        <div className="border-t border-border pt-4">
+          <CheckboxField
+            label="Usar grupos de acesso"
+            helpField="commands.useAccessGroups"
+            description="Restringe comandos por grupo de acesso (useAccessGroups)"
+            checked={data.useAccessGroups}
+            onChange={(v) => onChange({ ...data, useAccessGroups: v })}
+          />
+        </div>
+        </>)}
+
         <SaveButton onClick={handleSave} saving={saving} />
       </CardContent>
     </Card>
@@ -2456,6 +2634,7 @@ function PluginsPanel({
   onSave: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const handleSave = async () => {
     setSaving(true)
     await onSave()
@@ -2468,11 +2647,11 @@ function PluginsPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <Puzzle className="h-4 w-4" /> Plugins
         </CardTitle>
-        <CardDescription>Gerenciamento de plugins, allow/deny lists e diretórios de carregamento</CardDescription>
+        <CardDescription>Ative ou desative plugins do assistente. Os padrões permitem todos os plugins.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <CheckboxField
-          label="Plugins habilitados (plugins.enabled)"
+          label="Plugins ativados"
           helpField="plugins.enabled"
           description="Ativa o sistema de plugins do OpenClaw"
           checked={data.enabled}
@@ -2481,9 +2660,12 @@ function PluginsPanel({
 
         {data.enabled && (
           <>
+            <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+            {showAdvanced && (<>
             <div className="border-t border-border pt-4">
               <TagInput
-                label="Allow (plugins.allow)"
+                label="Plugins permitidos"
                 helpField="plugins.allow"
                 description="Plugins permitidos explicitamente (vazio = todos)"
                 values={data.allow}
@@ -2494,7 +2676,7 @@ function PluginsPanel({
 
             <div className="border-t border-border pt-4">
               <TagInput
-                label="Deny (plugins.deny)"
+                label="Plugins bloqueados"
                 helpField="plugins.deny"
                 description="Plugins bloqueados explicitamente"
                 values={data.deny}
@@ -2505,7 +2687,7 @@ function PluginsPanel({
 
             <div className="border-t border-border pt-4">
               <TagInput
-                label="Diretórios de carregamento (plugins.load.paths)"
+                label="Pastas de plugins"
                 helpField="plugins.load.paths"
                 description="Diretórios adicionais para carregar plugins"
                 values={data.loadPaths}
@@ -2513,6 +2695,7 @@ function PluginsPanel({
                 placeholder="/path/to/plugins"
               />
             </div>
+            </>)}
           </>
         )}
 
@@ -2534,6 +2717,7 @@ function EnvironmentPanel({
   onSave: () => void
 }) {
   const [saving, setSaving] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const handleSave = async () => {
     setSaving(true)
     await onSave()
@@ -2546,7 +2730,7 @@ function EnvironmentPanel({
         <CardTitle className="text-base flex items-center gap-2">
           <Globe className="h-4 w-4" /> Ambiente
         </CardTitle>
-        <CardDescription>Variáveis de ambiente inline e configurações de shell</CardDescription>
+        <CardDescription>Variáveis de ambiente disponíveis para o assistente. Altere apenas se necessário.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div>
@@ -2562,11 +2746,14 @@ function EnvironmentPanel({
           />
         </div>
 
+        <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />
+
+        {showAdvanced && (<>
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium mb-3">Shell Environment</p>
+          <p className="text-sm font-medium mb-3">Variáveis do terminal</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <CheckboxField
-              label="Shell env habilitado"
+              label="Carregar variáveis do terminal"
               helpField="env.shellEnv"
               description="Carregar variáveis do shell do sistema (env.shellEnv.enabled)"
               checked={data.shellEnvEnabled}
@@ -2585,6 +2772,7 @@ function EnvironmentPanel({
             </div>
           </div>
         </div>
+        </>)}
 
         <SaveButton onClick={handleSave} saving={saving} />
       </CardContent>
