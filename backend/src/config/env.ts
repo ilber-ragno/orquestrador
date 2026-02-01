@@ -16,7 +16,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3001),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  ENCRYPTION_KEY: z.string().min(32).optional(),
+  ENCRYPTION_KEY: z.string().min(32),
 });
 
 export const env = envSchema.parse(process.env);

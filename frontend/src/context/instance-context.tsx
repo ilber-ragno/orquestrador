@@ -45,7 +45,9 @@ const InstanceContext = createContext<InstanceContextType | null>(null)
 
 export function InstanceProvider({ children }: { children: ReactNode }) {
   const [instances, setInstances] = useState<Instance[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try { return localStorage.getItem('selectedInstanceId') } catch { return null }
+  })
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null)
   const [statusLoading, setStatusLoading] = useState(false)
 
@@ -55,6 +57,7 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
       setInstances(data)
       if (data.length > 0 && !selectedId) {
         setSelectedId(data[0].id)
+        try { localStorage.setItem('selectedInstanceId', data[0].id) } catch {}
       }
     } catch (err) {
       console.error('Failed to load instances', err)
@@ -92,7 +95,10 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
         selectedInstance,
         instanceStatus,
         statusLoading,
-        selectInstance: setSelectedId,
+        selectInstance: (id: string) => {
+          setSelectedId(id)
+          try { localStorage.setItem('selectedInstanceId', id) } catch {}
+        },
         refreshInstances,
         refreshStatus,
       }}

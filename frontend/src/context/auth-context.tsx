@@ -13,7 +13,7 @@ interface AuthContextType {
   user: User | null
   isLoading: boolean
   isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, totpCode?: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const login = async (email: string, password: string) => {
-    const { data } = await api.post('/auth/login', { email, password })
+  const login = async (email: string, password: string, totpCode?: string) => {
+    const { data } = await api.post('/auth/login', { email, password, ...(totpCode ? { totpCode } : {}) })
     localStorage.setItem('accessToken', data.accessToken)
     setUser(data.user)
   }

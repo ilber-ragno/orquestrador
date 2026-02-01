@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { verifyPassword } from '../utils/password.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken, hashToken } from './token.service.js';
 import { AppError } from '../middleware/error-handler.js';
+import { verifySync } from 'otplib';
 
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 min
 const MAX_FAILED_ATTEMPTS = 5;
@@ -9,6 +10,7 @@ const MAX_FAILED_ATTEMPTS = 5;
 export async function login(
   email: string,
   password: string,
+  totpCode?: string,
   userAgent?: string,
   ipAddress?: string,
   correlationId?: string,
@@ -44,6 +46,28 @@ export async function login(
     });
 
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+  }
+
+  // Check 2FA if enabled
+  if (user.twoFactorEnabled && user.twoFactorSecret) {
+    if (!totpCode) {
+      // Password is valid but 2FA code is required — return special response
+      throw new AppError(403, 'TOTP_REQUIRED', '2FA code required');
+    }
+    const isValidTotp = verifySync({ token: totpCode, secret: user.twoFactorSecret });
+    if (!isValidTotp) {
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'auth.login_failed',
+          ipAddress,
+          userAgent,
+          correlationId,
+          details: { reason: 'invalid_totp' },
+        },
+      });
+      throw new AppError(401, 'INVALID_TOTP', 'Invalid 2FA code');
+    }
   }
 
   // Reset failed attempts, update last login

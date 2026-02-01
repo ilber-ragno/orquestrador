@@ -1,7 +1,7 @@
 import { useAuth } from '@/context/auth-context'
 import { Button } from '@/components/ui/button'
-import { Bot, LogOut, Menu, ChevronDown } from 'lucide-react'
-import { useState } from 'react'
+import { Bot, LogOut, Menu, ChevronDown, Moon, Sun } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
 interface TopbarProps {
   onToggleSidebar: () => void
@@ -14,6 +14,17 @@ export function Topbar({ onToggleSidebar, instances, selectedInstance, onSelectI
   const { user, logout } = useAuth()
   const [showInstances, setShowInstances] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [dark, setDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    }
+    return false
+  })
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('theme', dark ? 'dark' : 'light')
+  }, [dark])
 
   const currentInstance = instances.find((i) => i.id === selectedInstance)
 
@@ -60,6 +71,11 @@ export function Topbar({ onToggleSidebar, instances, selectedInstance, onSelectI
       </div>
 
       <div className="flex-1" />
+
+      {/* Dark mode toggle */}
+      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDark(!dark)} title={dark ? 'Modo claro' : 'Modo escuro'}>
+        {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </Button>
 
       {/* User menu */}
       <div className="relative">

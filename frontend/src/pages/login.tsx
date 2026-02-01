@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
-import { Bot, Loader2 } from 'lucide-react'
+import { Bot, Loader2, ShieldCheck } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [totpCode, setTotpCode] = useState('')
+  const [needsTotp, setNeedsTotp] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
@@ -20,11 +22,16 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(email, password)
+      await login(email, password, needsTotp ? totpCode : undefined)
       navigate('/', { replace: true })
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
-      setError(msg || 'Falha ao fazer login')
+      const resp = (err as { response?: { data?: { error?: { code?: string; message?: string } } } })?.response?.data?.error
+      if (resp?.code === 'TOTP_REQUIRED') {
+        setNeedsTotp(true)
+        setError('')
+      } else {
+        setError(resp?.message || 'Falha ao fazer login')
+      }
     } finally {
       setLoading(false)
     }
@@ -43,8 +50,19 @@ export default function LoginPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Entrar</CardTitle>
-            <CardDescription>Faça login para acessar o painel</CardDescription>
+            <CardTitle className="text-lg">
+              {needsTotp ? (
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5" />
+                  Verificação em duas etapas
+                </span>
+              ) : 'Entrar'}
+            </CardTitle>
+            <CardDescription>
+              {needsTotp
+                ? 'Digite o código do seu app autenticador'
+                : 'Faça login para acessar o painel'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -54,35 +72,66 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@clawd.local"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  autoFocus
-                />
-              </div>
+              {!needsTotp ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="admin@clawd.local"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      autoFocus
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Senha</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoComplete="current-password"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="totpCode">Código TOTP</Label>
+                  <Input
+                    id="totpCode"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    required
+                    autoComplete="one-time-code"
+                    autoFocus
+                  />
+                </div>
+              )}
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Entrar'}
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : needsTotp ? 'Verificar' : 'Entrar'}
               </Button>
+
+              {needsTotp && (
+                <button
+                  type="button"
+                  className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => { setNeedsTotp(false); setTotpCode(''); setError(''); }}
+                >
+                  Voltar ao login
+                </button>
+              )}
             </form>
           </CardContent>
         </Card>

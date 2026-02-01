@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useInstance } from '@/context/instance-context'
 import { api } from '@/lib/api-client'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -69,6 +70,7 @@ function getActionColor(action: string): string {
 }
 
 export default function LogsPage() {
+  const { selectedInstance, instances } = useInstance()
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [pagination, setPagination] = useState<Pagination | null>(null)
   const [stats, setStats] = useState<AuditStats | null>(null)
@@ -76,6 +78,7 @@ export default function LogsPage() {
   const [search, setSearch] = useState('')
   const [actionFilter, setActionFilter] = useState('')
   const [resourceFilter, setResourceFilter] = useState('')
+  const [instanceFilter, setInstanceFilter] = useState('')
   const [page, setPage] = useState(1)
   const [showFilters, setShowFilters] = useState(false)
   const [showStats, setShowStats] = useState(false)
@@ -93,6 +96,7 @@ export default function LogsPage() {
       if (search) params.set('search', search)
       if (actionFilter) params.set('action', actionFilter)
       if (resourceFilter) params.set('resource', resourceFilter)
+      if (instanceFilter) params.set('instanceId', instanceFilter)
 
       const { data } = await api.get(`/audit?${params.toString()}`)
       setLogs(data.data)
@@ -102,7 +106,7 @@ export default function LogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, search, actionFilter, resourceFilter])
+  }, [page, search, actionFilter, resourceFilter, instanceFilter])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -164,6 +168,7 @@ export default function LogsPage() {
     setSearch('')
     setActionFilter('')
     setResourceFilter('')
+    setInstanceFilter('')
     setPage(1)
   }
 
@@ -314,6 +319,19 @@ export default function LogsPage() {
                   onChange={(e) => setResourceFilter(e.target.value)}
                   className="mt-1"
                 />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground">Instância</label>
+                <select
+                  className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={instanceFilter}
+                  onChange={(e) => { setInstanceFilter(e.target.value); setPage(1) }}
+                >
+                  <option value="">Todas</option>
+                  {instances.map((inst) => (
+                    <option key={inst.id} value={inst.id}>{inst.name}</option>
+                  ))}
+                </select>
               </div>
               <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
                 <X className="h-3 w-3" /> Limpar

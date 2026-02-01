@@ -17,12 +17,21 @@ declare global {
 
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
-    return next(new AppError(401, 'UNAUTHORIZED', 'Missing or invalid authorization header'));
+  // Support token via query param for SSE (EventSource doesn't support custom headers)
+  const queryToken = req.query.token as string | undefined;
+
+  let token: string | undefined;
+  if (header?.startsWith('Bearer ')) {
+    token = header.slice(7);
+  } else if (queryToken) {
+    token = queryToken;
+  }
+
+  if (!token) {
+    return next(new AppError(401, 'UNAUTHORIZED', 'Missing or invalid authorization'));
   }
 
   try {
-    const token = header.slice(7);
     const payload = verifyAccessToken(token);
     req.user = payload;
     next();

@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import {
   Plus,
@@ -40,6 +41,7 @@ interface HistoryItem {
 
 export default function SettingsPage() {
   const { selectedId } = useInstance()
+  const toast = useToast()
   const [configs, setConfigs] = useState<ConfigItem[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -58,12 +60,12 @@ export default function SettingsPage() {
       const { data } = await api.get(`/instances/${selectedId}/config`)
       setConfigs(data)
       setEditValues({})
-    } catch (err) {
-      console.error('Failed to load configs', err)
+    } catch {
+      toast.error('Erro ao carregar configurações')
     } finally {
       setLoading(false)
     }
-  }, [selectedId])
+  }, [selectedId, toast])
 
   const fetchHistory = useCallback(async () => {
     if (!selectedId) return
@@ -71,12 +73,12 @@ export default function SettingsPage() {
     try {
       const { data } = await api.get(`/instances/${selectedId}/config/history?limit=50`)
       setHistory(data.data)
-    } catch (err) {
-      console.error('Failed to load history', err)
+    } catch {
+      toast.error('Erro ao carregar histórico de configurações')
     } finally {
       setHistoryLoading(false)
     }
-  }, [selectedId])
+  }, [selectedId, toast])
 
   useEffect(() => {
     fetchConfigs()
@@ -92,9 +94,10 @@ export default function SettingsPage() {
       setNewKey('')
       setNewValue('')
       setNewEncrypted(false)
+      toast.success('Configuração adicionada com sucesso')
       await fetchConfigs()
-    } catch (err) {
-      console.error('Failed to add config', err)
+    } catch {
+      toast.error('Erro ao adicionar configuração')
     } finally {
       setSaving(false)
     }
@@ -108,9 +111,10 @@ export default function SettingsPage() {
         configs: [{ key, value: editValues[key], encrypted }],
       })
       setEditValues((prev) => { const n = { ...prev }; delete n[key]; return n })
+      toast.success('Configuração atualizada com sucesso')
       await fetchConfigs()
-    } catch (err) {
-      console.error('Failed to update config', err)
+    } catch {
+      toast.error('Erro ao atualizar configuração')
     } finally {
       setSaving(false)
     }

@@ -4,6 +4,7 @@ import { api } from '@/lib/api-client'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useToast } from '@/components/ui/toast'
 import {
   ListTodo,
   Loader2,
@@ -33,6 +34,7 @@ const statusCfg: Record<string, { icon: typeof CheckCircle2; color: string; bg: 
 
 export default function TasksPage() {
   const { selectedId } = useInstance()
+  const toast = useToast()
   const [jobs, setJobs] = useState<Job[]>([])
   const [stats, setStats] = useState<JobStats | null>(null)
   const [loading, setLoading] = useState(false)
@@ -48,18 +50,29 @@ export default function TasksPage() {
       const { data } = await api.get(`/jobs?${params}`)
       setJobs(data.data)
       setTotalPages(data.pagination.totalPages)
-    } catch (err) { console.error(err) }
+    } catch (err) {
+      toast.error('Falha ao carregar tarefas')
+    }
     finally { setLoading(false) }
-  }, [page, selectedId])
+  }, [page, selectedId, toast])
 
   const fetchStats = useCallback(async () => {
-    try { const { data } = await api.get('/jobs/stats'); setStats(data) } catch {}
-  }, [])
+    try { const { data } = await api.get('/jobs/stats'); setStats(data) } catch (err) {
+      toast.error('Falha ao carregar estatísticas')
+    }
+  }, [toast])
 
   useEffect(() => { fetchJobs(); fetchStats() }, [fetchJobs, fetchStats])
 
   const handleCancel = async (jobId: string) => {
-    try { await api.post(`/jobs/${jobId}/cancel`); fetchJobs(); fetchStats() } catch {}
+    try {
+      await api.post(`/jobs/${jobId}/cancel`)
+      toast.success('Tarefa cancelada com sucesso')
+      fetchJobs()
+      fetchStats()
+    } catch (err) {
+      toast.error('Falha ao cancelar tarefa')
+    }
   }
 
   return (

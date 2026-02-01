@@ -1,6 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
+import * as openclaw from '../services/openclaw.service.js';
+import { execInContainer } from '../services/lxc.service.js';
 import os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -245,6 +247,146 @@ router.post(
     }
   },
 );
+
+// GET /diagnostics/instance/:id - Per-instance diagnostics inside container (Etapa 28)
+router.get('/instance/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instance = await prisma.instance.findUnique({ where: { id: req.params.id as string } });
+    if (!instance) return res.status(404).json({ error: { message: 'Instância não encontrada' } });
+    if (!instance.containerHost || !instance.containerName) {
+      return res.json({ status: 'error', checks: [{ name: 'container', status: 'error', message: 'Container não mapeado', suggestion: null }] });
+    }
+
+    const host = instance.containerHost;
+    const container = instance.containerName;
+    const checks: { name: string; status: 'ok' | 'warning' | 'error'; message: string; suggestion: string | null }[] = [];
+
+    // OpenClaw checks
+    const openclawChecks = await openclaw.validateInstance(host, container);
+    for (const c of openclawChecks) {
+      let suggestion: string | null = null;
+      if (c.status === 'error' && c.name === 'openclaw_installed') suggestion = 'Instalar via Setup > Preparação do Ambiente';
+      if (c.status === 'warning' && c.name === 'gateway_running') suggestion = 'Iniciar gateway via Setup > Configuração do Gateway';
+      if (c.status === 'warning' && c.name === 'whatsapp_paired') suggestion = 'Parear via Canais > WhatsApp';
+      if (c.status === 'warning' && c.name === 'provider_configured') suggestion = 'Cadastrar provider em Conexões > Provedores de IA';
+      checks.push({ name: c.name, status: c.status, message: c.detail, suggestion });
+    }
+
+    // Container disk usage
+    try {
+      const diskResult = await execInContainer(host, container, "df -h / | tail -1 | awk '{print $5, $2, $3, $4}'");
+      if (diskResult.exitCode === 0) {
+        const parts = diskResult.stdout.trim().split(' ');
+        const percent = parseInt(parts[0]);
+        checks.push({
+          name: 'container_disk',
+          status: percent > 90 ? 'error' : percent > 75 ? 'warning' : 'ok',
+          message: `Disco: ${parts[0]} usado (${parts[2]} de ${parts[1]})`,
+          suggestion: percent > 90 ? 'Limpar arquivos temporários ou logs antigos' : null,
+        });
+      }
+    } catch {}
+
+    // Container memory
+    try {
+      const memResult = await execInContainer(host, container, "free -m | grep Mem | awk '{printf \"%d %d %d\", $2, $3, $3*100/$2}'");
+      if (memResult.exitCode === 0) {
+        const parts = memResult.stdout.trim().split(' ');
+        const percent = parseInt(parts[2]);
+        checks.push({
+          name: 'container_memory',
+          status: percent > 90 ? 'error' : percent > 75 ? 'warning' : 'ok',
+          message: `Memória: ${percent}% (${parts[1]}MB de ${parts[0]}MB)`,
+          suggestion: percent > 90 ? 'Reiniciar serviços ou aumentar memória do container' : null,
+        });
+      }
+    } catch {}
+
+    // Recent error logs
+    try {
+      const logResult = await execInContainer(host, container, "tail -100 /tmp/openclaw-gateway.log 2>/dev/null | grep -i 'error\\|fatal\\|crash' | tail -5");
+      if (logResult.stdout.trim()) {
+        checks.push({
+          name: 'recent_errors',
+          status: 'warning',
+          message: `Erros recentes: ${logResult.stdout.trim().split('\n').length} encontrados`,
+          suggestion: 'Verificar logs do gateway em Tarefas > Logs',
+        });
+      } else {
+        checks.push({ name: 'recent_errors', status: 'ok', message: 'Sem erros recentes nos logs', suggestion: null });
+      }
+    } catch {}
+
+    const overallStatus = checks.some(c => c.status === 'error') ? 'error' : checks.some(c => c.status === 'warning') ? 'warning' : 'ok';
+    res.json({ status: overallStatus, instanceId: instance.id, instanceName: instance.name, checks, timestamp: new Date().toISOString() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ══════════════════════════════════════
+// OPENCLAW DOCTOR
+// ══════════════════════════════════════
+
+// POST /diagnostics/doctor - Run openclaw doctor
+router.post('/doctor', authenticate, requireRole('ADMIN', 'OPERATOR'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instId = req.query.instanceId as string | undefined;
+    const where = instId ? { id: instId } : { containerHost: { not: null as any }, containerName: { not: null as any } };
+    const inst = await prisma.instance.findFirst({ where });
+    if (!inst || !inst.containerHost || !inst.containerName) {
+      return res.status(400).json({ error: { message: 'Nenhuma instância com container disponível' } });
+    }
+
+    const result = await execInContainer(inst.containerHost, inst.containerName, 'openclaw doctor 2>&1');
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.sub,
+        action: 'diagnostics.doctor',
+        resource: 'instance',
+        resourceId: inst.id,
+        details: { output: result.stdout.substring(0, 2000) } as any,
+        ipAddress: req.ip,
+        correlationId: req.correlationId,
+      },
+    });
+
+    res.json({ success: result.exitCode === 0, output: result.stdout, instanceId: inst.id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /diagnostics/doctor-fix - Run openclaw doctor --fix
+router.post('/doctor-fix', authenticate, requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instId = req.query.instanceId as string | undefined;
+    const where = instId ? { id: instId } : { containerHost: { not: null as any }, containerName: { not: null as any } };
+    const inst = await prisma.instance.findFirst({ where });
+    if (!inst || !inst.containerHost || !inst.containerName) {
+      return res.status(400).json({ error: { message: 'Nenhuma instância com container disponível' } });
+    }
+
+    const result = await execInContainer(inst.containerHost, inst.containerName, 'openclaw doctor --fix 2>&1');
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.sub,
+        action: 'diagnostics.doctor_fix',
+        resource: 'instance',
+        resourceId: inst.id,
+        details: { output: result.stdout.substring(0, 2000) } as any,
+        ipAddress: req.ip,
+        correlationId: req.correlationId,
+      },
+    });
+
+    res.json({ success: result.exitCode === 0, output: result.stdout, instanceId: inst.id });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // --- Helpers ---
 

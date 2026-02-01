@@ -11,19 +11,33 @@ import {
   ShieldCheck,
   Stethoscope,
   Settings,
+  Settings2,
+  Bot,
+  MessageCircle,
+  MessagesSquare,
+  Zap,
+  Webhook,
+  Smartphone,
 } from 'lucide-react'
 
 const menuItems = [
   { label: 'Painel', icon: LayoutDashboard, path: '/', enabled: true },
   { label: 'Assistente Inicial', icon: Compass, path: '/setup', enabled: true },
   { label: 'Inteligência e APIs', icon: Link2, path: '/connections', enabled: true },
+  { label: 'Agents', icon: Bot, path: '/agents', enabled: true },
+  { label: 'Canais', icon: MessageCircle, path: '/channels', enabled: true },
+  { label: 'Conversas', icon: MessagesSquare, path: '/chat', enabled: true },
   { label: 'Planos de Uso', icon: CreditCard, path: '/plans', enabled: true },
+  { label: 'Automações', icon: Zap, path: '/automations', enabled: true },
+  { label: 'Webhooks', icon: Webhook, path: '/webhooks', enabled: true },
+  { label: 'Dispositivos', icon: Smartphone, path: '/nodes', enabled: true },
   { label: 'Serviços Ativos', icon: Server, path: '/services', enabled: true },
   { label: 'Histórico', icon: ScrollText, path: '/logs', enabled: true },
   { label: 'Ações em Andamento', icon: ListTodo, path: '/tasks', enabled: true },
   { label: 'Usuários e Acesso', icon: ShieldCheck, path: '/security', enabled: true },
   { label: 'Verificação de Saúde', icon: Stethoscope, path: '/diagnostics', enabled: true },
   { label: 'Configurações', icon: Settings, path: '/settings', enabled: true },
+  { label: 'OpenClaw', icon: Settings2, path: '/openclaw-config', enabled: true },
 ]
 
 interface SidebarProps {

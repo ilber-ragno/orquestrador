@@ -3,7 +3,9 @@ import { api } from '@/lib/api-client'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
+import { FieldHelp } from '@/components/ui/help-tooltip'
 import {
   Play,
   Square,
@@ -14,8 +16,6 @@ import {
   RefreshCw,
   Loader2,
   Server,
-  Cpu,
-  HardDrive,
   Clock,
   CheckCircle2,
   XCircle,
@@ -34,13 +34,25 @@ interface ServiceInfo {
 }
 
 const statusConfig = {
-  running: { icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10', label: 'Rodando' },
+  running: { icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10', label: 'Funcionando' },
   stopped: { icon: MinusCircle, color: 'text-muted-foreground', bg: 'bg-muted', label: 'Parado' },
-  failed: { icon: XCircle, color: 'text-error', bg: 'bg-error/10', label: 'Falhou' },
+  failed: { icon: XCircle, color: 'text-error', bg: 'bg-error/10', label: 'Com erro' },
   unknown: { icon: AlertCircle, color: 'text-warning', bg: 'bg-warning/10', label: 'Desconhecido' },
 }
 
+/** Descrições amigáveis para serviços conhecidos */
+const friendlyDescriptions: Record<string, string> = {
+  'openclaw-gateway': 'Ponte de comunicação entre os canais (WhatsApp, Telegram) e o assistente',
+  'openclaw-watchdog': 'Monitor que verifica se os serviços estão funcionando e reinicia se necessário',
+  'openclaw-heartbeat': 'Tarefa automática que executa rotinas periódicas do assistente',
+  'openclaw-agent': 'O assistente de IA que processa e responde mensagens',
+  nginx: 'Servidor web que gerencia conexões HTTPS e direciona requisições',
+  postgresql: 'Banco de dados onde ficam salvas todas as configurações e histórico',
+  redis: 'Memória rápida para cache e filas de processamento',
+}
+
 export default function ServicesPage() {
+  const toast = useToast()
   const [services, setServices] = useState<ServiceInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -53,12 +65,12 @@ export default function ServicesPage() {
     try {
       const { data } = await api.get('/services')
       setServices(data)
-    } catch (err) {
-      console.error('Failed to load services', err)
+    } catch {
+      toast.error('Erro ao carregar serviços')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     fetchServices()
@@ -71,9 +83,13 @@ export default function ServicesPage() {
       if (data.status) {
         setServices((prev) => prev.map((s) => (s.name === name ? { ...s, ...data.status } : s)))
         if (selectedService?.name === name) setSelectedService(data.status)
+        const actionLabels: Record<string, string> = {
+          start: 'iniciado', stop: 'parado', restart: 'reiniciado', enable: 'ativado para início automático', disable: 'desativado do início automático',
+        }
+        toast.success(`Serviço ${name} ${actionLabels[action] || action} com sucesso`)
       }
-    } catch (err) {
-      console.error(`Failed to ${action} ${name}`, err)
+    } catch {
+      toast.error(`Erro ao executar ação no serviço ${name}`)
     } finally {
       setActionLoading(null)
     }
@@ -84,17 +100,22 @@ export default function ServicesPage() {
     try {
       const { data } = await api.get(`/services/${name}/status`)
       setSelectedService(data)
-    } catch (err) {
-      console.error('Failed to load service detail', err)
+    } catch {
+      toast.error('Erro ao carregar detalhes do serviço')
     } finally {
       setDetailLoading(false)
     }
   }
 
+  const getDescription = (svc: ServiceInfo) => {
+    return friendlyDescriptions[svc.name] || svc.description
+  }
+
   const filtered = services.filter(
     (s) =>
       s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.description.toLowerCase().includes(search.toLowerCase()),
+      s.description.toLowerCase().includes(search.toLowerCase()) ||
+      (friendlyDescriptions[s.name] || '').toLowerCase().includes(search.toLowerCase()),
   )
 
   const counts = {
@@ -107,8 +128,11 @@ export default function ServicesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Serviços Ativos</h1>
-          <p className="text-muted-foreground text-sm mt-1">Gerenciar serviços em execução no servidor</p>
+          <h1 className="text-2xl font-bold tracking-tight">Serviços</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Componentes que mantêm o assistente funcionando
+            <FieldHelp field="services.status" />
+          </p>
         </div>
         <Button variant="outline" size="sm" className="gap-2" onClick={fetchServices} disabled={loading}>
           {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
@@ -125,7 +149,7 @@ export default function ServicesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{counts.running}</p>
-              <p className="text-xs text-muted-foreground">Rodando</p>
+              <p className="text-xs text-muted-foreground">Funcionando</p>
             </div>
           </CardContent>
         </Card>
@@ -147,7 +171,7 @@ export default function ServicesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold">{counts.failed}</p>
-              <p className="text-xs text-muted-foreground">Com falha</p>
+              <p className="text-xs text-muted-foreground">Com erro</p>
             </div>
           </CardContent>
         </Card>
@@ -187,7 +211,7 @@ export default function ServicesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{svc.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{svc.description}</p>
+                      <p className="text-xs text-muted-foreground truncate">{getDescription(svc)}</p>
                     </div>
                     <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', cfg.bg, cfg.color)}>
                       {cfg.label}
@@ -198,7 +222,7 @@ export default function ServicesPage() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
-                          title="Iniciar"
+                          title="Iniciar serviço"
                           disabled={actionLoading !== null}
                           onClick={(e) => { e.stopPropagation(); handleAction(svc.name, 'start') }}
                         >
@@ -211,7 +235,7 @@ export default function ServicesPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            title="Reiniciar"
+                            title="Reiniciar serviço"
                             disabled={actionLoading !== null}
                             onClick={(e) => { e.stopPropagation(); handleAction(svc.name, 'restart') }}
                           >
@@ -221,7 +245,7 @@ export default function ServicesPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            title="Parar"
+                            title="Parar serviço"
                             disabled={actionLoading !== null}
                             onClick={(e) => { e.stopPropagation(); handleAction(svc.name, 'stop') }}
                           >
@@ -246,7 +270,7 @@ export default function ServicesPage() {
                   <Server className="h-4 w-4" />
                   {selectedService.name}
                 </CardTitle>
-                <CardDescription>{selectedService.description}</CardDescription>
+                <CardDescription>{getDescription(selectedService)}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {detailLoading ? (
@@ -261,25 +285,46 @@ export default function ServicesPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground flex items-center gap-1"><Power className="h-3 w-3" /> Início automático</span>
-                        <span className="font-medium">{selectedService.enabled ? 'Habilitado' : 'Desabilitado'}</span>
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Power className="h-3 w-3" /> Início automático
+                          <FieldHelp field="services.enabled" />
+                        </span>
+                        <span className={cn('font-medium', selectedService.enabled ? 'text-success' : 'text-muted-foreground')}>
+                          {selectedService.enabled ? 'Ativo' : 'Inativo'}
+                        </span>
                       </div>
-                      {selectedService.pid && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground flex items-center gap-1"><Cpu className="h-3 w-3" /> Processo</span>
-                          <span className="font-mono text-xs">{selectedService.pid}</span>
-                        </div>
-                      )}
                       {selectedService.uptime && (
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Tempo ativo</span>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> Ativo há
+                            <FieldHelp field="services.uptime" />
+                          </span>
                           <span className="font-medium">{selectedService.uptime}</span>
                         </div>
                       )}
                       {selectedService.memory && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground flex items-center gap-1"><HardDrive className="h-3 w-3" /> Memória</span>
-                          <span className="font-medium">{selectedService.memory}</span>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              Memória em uso
+                              <FieldHelp field="services.memory" />
+                            </span>
+                            <span className="font-medium">{selectedService.memory}</span>
+                          </div>
+                          {(() => {
+                            const m = selectedService.memory.match(/([\d.]+)\s*(MB|GB|KB)/i);
+                            if (!m) return null;
+                            let mb = parseFloat(m[1]);
+                            if (m[2].toUpperCase() === 'GB') mb *= 1024;
+                            if (m[2].toUpperCase() === 'KB') mb /= 1024;
+                            const pct = Math.min(100, Math.round((mb / 512) * 100));
+                            const color = pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-yellow-500' : 'bg-emerald-500';
+                            return (
+                              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>

@@ -16,12 +16,16 @@ router.get('/', authenticate, async (req: Request, res: Response, next: NextFunc
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
     const search = req.query.search as string | undefined;
+    const instanceId = req.query.instanceId as string | undefined;
 
     const where: Record<string, unknown> = {};
     if (action) where.action = { contains: action };
     if (userId) where.userId = userId;
     if (resource) where.resource = resource;
     if (correlationId) where.correlationId = correlationId;
+    if (instanceId) {
+      where.details = { path: ['instanceId'], equals: instanceId };
+    }
     if (from || to) {
       where.createdAt = {
         ...(from ? { gte: new Date(from) } : {}),

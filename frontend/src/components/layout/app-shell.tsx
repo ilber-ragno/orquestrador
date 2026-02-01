@@ -17,8 +17,8 @@ function AppShellInner() {
         onSelectInstance={selectInstance}
       />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className="lg:pl-60 pt-4">
-        <div className="max-w-7xl mx-auto px-4 pb-8">
+      <main className="lg:pl-60 pt-3 sm:pt-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 pb-6 sm:pb-8">
           <Outlet />
         </div>
       </main>

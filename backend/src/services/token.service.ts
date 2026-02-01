@@ -9,11 +9,11 @@ export interface TokenPayload {
 }
 
 export function signAccessToken(payload: TokenPayload): string {
-  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRY });
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRY as string & jwt.SignOptions['expiresIn'] });
 }
 
 export function signRefreshToken(payload: { sub: string }): string {
-  return jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRY });
+  return jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRY as string & jwt.SignOptions['expiresIn'] });
 }
 
 export function verifyAccessToken(token: string): TokenPayload {

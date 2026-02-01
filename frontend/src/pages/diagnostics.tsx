@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api-client'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import {
   Stethoscope,
@@ -21,6 +22,7 @@ import {
   Trash2,
   Server,
   Activity,
+  Wrench,
 } from 'lucide-react'
 
 interface HealthCheck {
@@ -86,36 +88,55 @@ function formatUptime(seconds: number): string {
 }
 
 export default function DiagnosticsPage() {
+  const toast = useToast()
   const [health, setHealth] = useState<HealthResult | null>(null)
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null)
   const [loading, setLoading] = useState(false)
   const [metricsLoading, setMetricsLoading] = useState(false)
   const [cleanupLoading, setCleanupLoading] = useState(false)
   const [cleanupResult, setCleanupResult] = useState<string | null>(null)
+  const [doctorLoading, setDoctorLoading] = useState(false)
+  const [doctorFixLoading, setDoctorFixLoading] = useState(false)
+  const [doctorResult, setDoctorResult] = useState<string | null>(null)
 
   const fetchHealth = useCallback(async () => {
     setLoading(true)
     try {
       const { data } = await api.get('/diagnostics/health')
       setHealth(data)
-    } catch (err) {
-      console.error('Failed to load health', err)
+    } catch {
+      toast.error('Erro ao carregar verificação de saúde')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [toast])
 
   const fetchMetrics = useCallback(async () => {
     setMetricsLoading(true)
     try {
       const { data } = await api.get('/diagnostics/metrics')
       setMetrics(data)
-    } catch (err) {
-      console.error('Failed to load metrics', err)
+    } catch {
+      toast.error('Erro ao carregar métricas do sistema')
     } finally {
       setMetricsLoading(false)
     }
-  }, [])
+  }, [toast])
+
+  const runDoctor = async (fix = false) => {
+    fix ? setDoctorFixLoading(true) : setDoctorLoading(true)
+    try {
+      const endpoint = fix ? '/diagnostics/doctor-fix' : '/diagnostics/doctor'
+      const { data } = await api.post(endpoint)
+      setDoctorResult(data.output || data.message || 'Concluído')
+      if (fix) toast.success('Correções do Doctor aplicadas')
+    } catch {
+      toast.error('Erro ao executar Doctor')
+    } finally {
+      setDoctorLoading(false)
+      setDoctorFixLoading(false)
+    }
+  }
 
   const handleCleanup = async () => {
     setCleanupLoading(true)
@@ -123,10 +144,11 @@ export default function DiagnosticsPage() {
     try {
       const { data } = await api.post('/diagnostics/cleanup')
       setCleanupResult(`${data.deletedSessions} sessões expiradas removidas`)
+      toast.success('Limpeza executada com sucesso')
       fetchHealth()
-    } catch (err) {
-      console.error('Failed to cleanup', err)
+    } catch {
       setCleanupResult('Erro ao executar limpeza')
+      toast.error('Erro ao executar limpeza de sessões')
     } finally {
       setCleanupLoading(false)
     }
@@ -367,6 +389,31 @@ export default function DiagnosticsPage() {
           </div>
         ) : null}
       </div>
+
+      {/* Doctor OpenClaw */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2"><Wrench className="h-4 w-4" /> Doctor OpenClaw</CardTitle>
+          <CardDescription>Verifica a configuração do OpenClaw no container e detecta problemas</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Button size="sm" className="gap-2" onClick={() => runDoctor(false)} disabled={doctorLoading || doctorFixLoading}>
+              {doctorLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Stethoscope className="h-3 w-3" />}
+              Executar Doctor
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => runDoctor(true)} disabled={doctorLoading || doctorFixLoading}>
+              {doctorFixLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
+              Auto-fix
+            </Button>
+          </div>
+          {doctorResult && (
+            <div className="bg-muted rounded-md p-4 max-h-96 overflow-auto">
+              <pre className="text-xs font-mono whitespace-pre-wrap">{doctorResult}</pre>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Actions */}
       <Card>

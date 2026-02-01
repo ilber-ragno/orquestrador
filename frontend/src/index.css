@@ -1,6 +1,39 @@
 @import "tailwindcss";
 
+/* Light mode (default) */
 @theme {
+  --color-background: #ffffff;
+  --color-foreground: #09090b;
+  --color-card: #ffffff;
+  --color-card-foreground: #09090b;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #09090b;
+  --color-primary: #7c3aed;
+  --color-primary-foreground: #fafafa;
+  --color-secondary: #f4f4f5;
+  --color-secondary-foreground: #18181b;
+  --color-muted: #f4f4f5;
+  --color-muted-foreground: #71717a;
+  --color-accent: #f4f4f5;
+  --color-accent-foreground: #18181b;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #fafafa;
+  --color-border: #e4e4e7;
+  --color-input: #e4e4e7;
+  --color-ring: #7c3aed;
+  --color-sidebar: #fafafa;
+  --color-sidebar-foreground: #09090b;
+  --color-sidebar-accent: #f4f4f5;
+  --color-sidebar-accent-foreground: #18181b;
+  --color-sidebar-border: #e4e4e7;
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
+  --radius: 0.5rem;
+}
+
+/* Dark mode */
+.dark {
   --color-background: #09090b;
   --color-foreground: #fafafa;
   --color-card: #0a0a0c;
@@ -28,16 +61,9 @@
   --color-success: #22c55e;
   --color-warning: #eab308;
   --color-error: #ef4444;
-  --radius: 0.5rem;
 }
 
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-}
+/* Inter font via system font stack — fallback for Inter */
 
 body {
   @apply bg-background text-foreground antialiased;

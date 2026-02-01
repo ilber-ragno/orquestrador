@@ -1,8 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { randomBytes } from 'crypto';
-import * as lxc from '../services/lxc.service.js';
+import * as openclaw from '../services/openclaw.service.js';
 import * as jobService from '../services/job.service.js';
 
 const router = Router();
@@ -11,18 +12,30 @@ const router = Router();
 router.get('/:instId/gateway', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const inst = await prisma.instance.findUnique({
-      where: { id: req.params.instId },
+      where: { id: req.params.instId as string },
       select: { id: true, name: true, gatewayMode: true, gatewayBind: true, gatewayPort: true, gatewayToken: true, gatewayStatus: true, containerName: true, containerHost: true },
     });
     if (!inst) return res.status(404).json({ error: { message: 'Instance not found' } });
 
+    // Try reading live status from container
+    let liveRunning = false;
+    let livePid: number | null = null;
+    if (inst.containerHost && inst.containerName) {
+      try {
+        const gw = await openclaw.getGatewayStatus(inst.containerHost, inst.containerName);
+        liveRunning = gw.running;
+        livePid = gw.pid;
+      } catch {}
+    }
+
     res.json({
       mode: inst.gatewayMode || 'local',
       bind: inst.gatewayBind || '0.0.0.0',
-      port: inst.gatewayPort || 8080,
+      port: inst.gatewayPort || 18789,
       token: inst.gatewayToken ? `${inst.gatewayToken.slice(0, 8)}****` : null,
-      status: inst.gatewayStatus || 'stopped',
+      status: liveRunning ? 'running' : (inst.gatewayStatus || 'stopped'),
       hasToken: !!inst.gatewayToken,
+      pid: livePid,
     });
   } catch (err) {
     next(err);
@@ -30,22 +43,42 @@ router.get('/:instId/gateway', authenticate, async (req: Request, res: Response,
 });
 
 // PUT /:instId/gateway - Update gateway config
+const updateGatewaySchema = z.object({
+  mode: z.enum(['local', 'remote']).optional(),
+  bind: z.enum(['loopback', 'lan', 'tailscale']).optional(),
+  port: z.number().int().min(1024).max(65535).optional(),
+});
+
 router.put(
   '/:instId/gateway',
   authenticate,
   requireRole('ADMIN', 'OPERATOR'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { mode, bind, port } = req.body;
+      const { mode, bind, port } = updateGatewaySchema.parse(req.body);
       const data: Record<string, unknown> = {};
-      if (mode && ['local', 'remote'].includes(mode)) data.gatewayMode = mode;
+      if (mode) data.gatewayMode = mode;
       if (bind) data.gatewayBind = bind;
-      if (port && Number.isInteger(port) && port > 0 && port < 65536) data.gatewayPort = port;
+      if (port) data.gatewayPort = port;
 
       const inst = await prisma.instance.update({
-        where: { id: req.params.instId },
+        where: { id: req.params.instId as string },
         data: data as any,
       });
+
+      // Sync to openclaw.json in container
+      if (inst.containerHost && inst.containerName) {
+        try {
+          const config = await openclaw.readConfig(inst.containerHost, inst.containerName);
+          if (config) {
+            if (!config.gateway) config.gateway = {};
+            if (mode) config.gateway.mode = mode;
+            if (bind) config.gateway.bind = bind;
+            if (port) config.gateway.port = port;
+            await openclaw.writeConfig(inst.containerHost, inst.containerName, config);
+          }
+        } catch {}
+      }
 
       await prisma.auditLog.create({
         data: {
@@ -74,17 +107,29 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const token = randomBytes(32).toString('hex');
-      await prisma.instance.update({
-        where: { id: req.params.instId },
+      const inst = await prisma.instance.update({
+        where: { id: req.params.instId as string },
         data: { gatewayToken: token },
       });
+
+      // Sync token to openclaw.json
+      if (inst.containerHost && inst.containerName) {
+        try {
+          const config = await openclaw.readConfig(inst.containerHost, inst.containerName);
+          if (config) {
+            if (!config.gateway) config.gateway = {};
+            config.gateway.token = token;
+            await openclaw.writeConfig(inst.containerHost, inst.containerName, config);
+          }
+        } catch {}
+      }
 
       await prisma.auditLog.create({
         data: {
           userId: req.user!.sub,
           action: 'gateway.token_rotated',
           resource: 'gateway',
-          resourceId: req.params.instId,
+          resourceId: req.params.instId as string,
           ipAddress: req.ip,
           correlationId: req.correlationId,
         },
@@ -109,7 +154,7 @@ router.post(
         return res.status(400).json({ error: { message: 'Invalid action' } });
       }
 
-      const inst = await prisma.instance.findUnique({ where: { id: req.params.instId } });
+      const inst = await prisma.instance.findUnique({ where: { id: req.params.instId as string } });
       if (!inst) return res.status(404).json({ error: { message: 'Instance not found' } });
 
       if (action === 'validate') {
@@ -140,16 +185,24 @@ router.post(
         await jobService.startStep(job.steps[0].id);
 
         try {
-          const cmd = action === 'start' ? 'systemctl start clawdbot-gateway'
-            : action === 'stop' ? 'systemctl stop clawdbot-gateway'
-            : 'systemctl restart clawdbot-gateway';
+          let result: { success: boolean; output?: string };
 
-          const result = await lxc.execInContainer(inst.containerHost, inst.containerName, cmd);
-          const newStatus = action === 'stop' ? 'stopped' : 'running';
+          if (action === 'start' || action === 'restart') {
+            result = await openclaw.startGateway(inst.containerHost, inst.containerName);
+          } else {
+            result = await openclaw.stopGateway(inst.containerHost, inst.containerName);
+          }
 
+          const newStatus = (action === 'stop' || !result.success) ? 'stopped' : 'running';
           await prisma.instance.update({ where: { id: inst.id }, data: { gatewayStatus: newStatus } });
-          await jobService.completeStep(job.steps[0].id, result.stdout || 'OK');
-          await jobService.completeJob(job.id, { action, status: newStatus });
+
+          if (result.success) {
+            await jobService.completeStep(job.steps[0].id, result.output || 'OK');
+            await jobService.completeJob(job.id, { action, status: newStatus });
+          } else {
+            await jobService.failStep(job.steps[0].id, result.output || 'Falhou');
+            await jobService.failJob(job.id, result.output || 'Falhou');
+          }
 
           await prisma.auditLog.create({
             data: {
@@ -157,13 +210,13 @@ router.post(
               action: `gateway.${action}`,
               resource: 'gateway',
               resourceId: inst.id,
-              details: { containerName: inst.containerName, exitCode: result.exitCode } as any,
+              details: { containerName: inst.containerName, success: result.success } as any,
               ipAddress: req.ip,
               correlationId: req.correlationId,
             },
           });
 
-          res.json({ success: true, status: newStatus, job: job.id });
+          res.json({ success: result.success, status: newStatus, job: job.id });
         } catch (err: any) {
           await jobService.failStep(job.steps[0].id, err.message);
           await jobService.failJob(job.id, err.message);

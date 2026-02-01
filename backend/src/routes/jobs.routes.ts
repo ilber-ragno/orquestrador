@@ -56,7 +56,7 @@ router.get('/stats', authenticate, async (_req: Request, res: Response, next: Ne
 router.get('/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const job = await prisma.job.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       include: { steps: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!job) return res.status(404).json({ error: { message: 'Job not found' } });
@@ -88,7 +88,7 @@ router.post('/', authenticate, async (req: Request, res: Response, next: NextFun
 // POST /jobs/:id/cancel - Cancel a job
 router.post('/:id/cancel', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const job = await jobService.cancelJob(req.params.id);
+    const job = await jobService.cancelJob(req.params.id as string);
     res.json(job);
   } catch (err) {
     next(err);
@@ -109,7 +109,7 @@ router.get('/:id/stream', authenticate, async (req: Request, res: Response) => {
   const interval = setInterval(async () => {
     try {
       const job = await prisma.job.findUnique({
-        where: { id: req.params.id },
+        where: { id: req.params.id as string },
         include: { steps: { orderBy: { sortOrder: 'asc' } } },
       });
       if (!job) {

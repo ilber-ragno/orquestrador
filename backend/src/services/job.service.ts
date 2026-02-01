@@ -100,4 +100,59 @@ export async function cancelJob(jobId: string) {
   });
 }
 
+/**
+ * withJob - Wraps any async action in a Job for tracking.
+ * Creates a job, runs the action, and marks the job as completed or failed.
+ */
+export async function withJob<T>(
+  opts: {
+    userId: string;
+    instanceId?: string;
+    type: string;
+    description: string;
+    steps?: string[];
+  },
+  action: (job: Awaited<ReturnType<typeof createJob>>) => Promise<T>,
+): Promise<{ job: Awaited<ReturnType<typeof createJob>>; result: T }> {
+  const job = await createJob({
+    userId: opts.userId,
+    instanceId: opts.instanceId,
+    type: opts.type,
+    description: opts.description,
+    steps: opts.steps,
+  });
+
+  await startJob(job.id);
+
+  // Start first step if any
+  if (job.steps.length > 0) {
+    await startStep(job.steps[0].id);
+  }
+
+  try {
+    const result = await action(job);
+    // Complete all remaining steps
+    for (const step of job.steps) {
+      try {
+        await completeStep(step.id, 'OK');
+      } catch {
+        // Step may already be completed
+      }
+    }
+    const completedJob = await completeJob(job.id, { result: typeof result === 'object' ? result : { value: result } } as any);
+    return { job: completedJob, result };
+  } catch (err: any) {
+    // Fail current step
+    for (const step of job.steps) {
+      try {
+        await failStep(step.id, err.message);
+      } catch {
+        // Step may already be completed/failed
+      }
+    }
+    await failJob(job.id, err.message);
+    throw err;
+  }
+}
+
 export type { JobStatus };

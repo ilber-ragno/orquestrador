@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { useToast } from '@/components/ui/toast'
 import {
   CreditCard,
   Plus,
@@ -30,6 +31,7 @@ interface UsageData { plan: Plan | null; usage: any; limits: Record<string, { us
 
 export default function PlansPage() {
   const { selectedId } = useInstance()
+  const toast = useToast()
   const [plans, setPlans] = useState<Plan[]>([])
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -38,24 +40,41 @@ export default function PlansPage() {
 
   const fetchPlans = useCallback(async () => {
     setLoading(true)
-    try { const { data } = await api.get('/plans'); setPlans(data) } catch {}
+    try { const { data } = await api.get('/plans'); setPlans(data) } catch (err) {
+      toast.error('Falha ao carregar planos')
+    }
     finally { setLoading(false) }
-  }, [])
+  }, [toast])
 
   const fetchUsage = useCallback(async () => {
     if (!selectedId) return
-    try { const { data } = await api.get(`/plans/usage/${selectedId}`); setUsage(data) } catch {}
-  }, [selectedId])
+    try { const { data } = await api.get(`/plans/usage/${selectedId}`); setUsage(data) } catch (err) {
+      toast.error('Falha ao carregar uso do plano')
+    }
+  }, [selectedId, toast])
 
   useEffect(() => { fetchPlans(); fetchUsage() }, [fetchPlans, fetchUsage])
 
   const handleAssign = async (planId: string) => {
     if (!selectedId) return
-    try { await api.post(`/plans/${planId}/assign/${selectedId}`); fetchUsage() } catch {}
+    try {
+      await api.post(`/plans/${planId}/assign/${selectedId}`)
+      toast.success('Plano atribuído com sucesso')
+      fetchUsage()
+    } catch (err) {
+      toast.error('Falha ao atribuir plano')
+    }
   }
 
   const handleDelete = async (id: string) => {
-    try { await api.delete(`/plans/${id}`); fetchPlans() } catch {}
+    if (!window.confirm('Tem certeza que deseja excluir este plano?')) return
+    try {
+      await api.delete(`/plans/${id}`)
+      toast.success('Plano excluído com sucesso')
+      fetchPlans()
+    } catch (err) {
+      toast.error('Falha ao excluir plano')
+    }
   }
 
   return (
@@ -164,6 +183,7 @@ export default function PlansPage() {
 }
 
 function PlanForm({ plan, onSaved, onCancel }: { plan: Plan | null; onSaved: () => void; onCancel: () => void }) {
+  const toast = useToast()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [f, setF] = useState({
@@ -187,8 +207,13 @@ function PlanForm({ plan, onSaved, onCancel }: { plan: Plan | null; onSaved: () 
         maxProviders: f.maxProviders ? parseInt(f.maxProviders) : null,
         blockOnExceed: f.blockOnExceed, fallbackAction: f.fallbackAction,
       }
-      if (plan) await api.put(`/plans/${plan.id}`, payload)
-      else await api.post('/plans', payload)
+      if (plan) {
+        await api.put(`/plans/${plan.id}`, payload)
+        toast.success('Plano atualizado com sucesso')
+      } else {
+        await api.post('/plans', payload)
+        toast.success('Plano criado com sucesso')
+      }
       onSaved()
     } catch (err: any) { setError(err.response?.data?.error?.message || 'Erro ao salvar') }
     finally { setSaving(false) }

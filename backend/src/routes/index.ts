@@ -12,6 +12,15 @@ import { gatewayRoutes } from './gateway.routes.js';
 import { plansRoutes } from './plans.routes.js';
 import { setupRoutes } from './setup.routes.js';
 import { securityRoutes } from './security.routes.js';
+import { clawdbotRoutes } from './clawdbot.routes.js';
+import { agentsRoutes } from './agents.routes.js';
+import { channelsRoutes } from './channels.routes.js';
+import { webhooksRoutes } from './webhooks.routes.js';
+import { automationsRoutes } from './automations.routes.js';
+import { chatRoutes } from './chat.routes.js';
+import { openclawConfigRoutes } from './openclaw-config.routes.js';
+import { nodesRoutes } from './nodes.routes.js';
+import { protocolRoutes } from './protocol.routes.js';
 
 const router = Router();
 
@@ -28,5 +37,14 @@ router.use('/instances', gatewayRoutes);
 router.use('/plans', plansRoutes);
 router.use('/instances', setupRoutes);
 router.use('/security', securityRoutes);
+router.use('/instances', clawdbotRoutes);
+router.use('/instances', agentsRoutes);
+router.use('/instances', channelsRoutes);
+router.use('/instances', webhooksRoutes);
+router.use('/instances', automationsRoutes);
+router.use('/instances', chatRoutes);
+router.use('/instances', openclawConfigRoutes);
+router.use('/instances', nodesRoutes);
+router.use('/instances', protocolRoutes);
 
 export { router as routes };

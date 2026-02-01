@@ -1,6 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
+import { execInContainer } from '../services/lxc.service.js';
 import bcrypt from 'bcrypt';
 import { generateSecret, generateURI, verifySync } from 'otplib';
 
@@ -64,16 +66,22 @@ router.post('/users', authenticate, requireRole('ADMIN'), async (req: Request, r
 });
 
 // PUT /security/users/:id - Update user
+const updateUserSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  role: z.enum(['ADMIN', 'OPERATOR', 'AUDITOR', 'CLIENT']).optional(),
+  isActive: z.boolean().optional(),
+});
+
 router.put('/users/:id', authenticate, requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, role, isActive } = req.body;
+    const parsed = updateUserSchema.parse(req.body);
     const data: Record<string, unknown> = {};
-    if (name) data.name = name;
-    if (role) data.role = role;
-    if (typeof isActive === 'boolean') data.isActive = isActive;
+    if (parsed.name) data.name = parsed.name;
+    if (parsed.role) data.role = parsed.role;
+    if (typeof parsed.isActive === 'boolean') data.isActive = parsed.isActive;
 
     const user = await prisma.user.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: data as any,
       select: { id: true, email: true, name: true, role: true, isActive: true },
     });
@@ -100,7 +108,7 @@ router.put('/users/:id', authenticate, requireRole('ADMIN'), async (req: Request
 router.post('/users/:id/unlock', authenticate, requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     await prisma.user.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { failedAttempts: 0, lockedUntil: null },
     });
     res.json({ success: true });
@@ -119,7 +127,7 @@ router.post('/users/:id/reset-password', authenticate, requireRole('ADMIN'), asy
 
     const hash = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { passwordHash: hash, failedAttempts: 0, lockedUntil: null },
     });
 
@@ -128,7 +136,7 @@ router.post('/users/:id/reset-password', authenticate, requireRole('ADMIN'), asy
         userId: req.user!.sub,
         action: 'user.password_reset',
         resource: 'user',
-        resourceId: req.params.id,
+        resourceId: req.params.id as string,
         ipAddress: req.ip,
         correlationId: req.correlationId,
       },
@@ -200,19 +208,30 @@ router.post('/2fa/verify', authenticate, async (req: Request, res: Response, nex
 router.post('/2fa/disable', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { code } = req.body;
+    if (!code) return res.status(400).json({ error: { message: 'Código TOTP obrigatório para desabilitar 2FA' } });
+
     const user = await prisma.user.findUnique({ where: { id: req.user!.sub } });
     if (!user?.twoFactorSecret || !user.twoFactorEnabled) {
       return res.status(400).json({ error: { message: '2FA not enabled' } });
     }
 
-    if (code) {
-      const isValid = verifySync({ token: code, secret: user.twoFactorSecret });
-      if (!isValid) return res.status(400).json({ error: { message: 'Código inválido' } });
-    }
+    const isValid = verifySync({ token: code, secret: user.twoFactorSecret });
+    if (!isValid) return res.status(400).json({ error: { message: 'Código inválido' } });
 
     await prisma.user.update({
       where: { id: req.user!.sub },
       data: { twoFactorEnabled: false, twoFactorSecret: null },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.sub,
+        action: 'security.2fa_disabled',
+        resource: 'user',
+        resourceId: req.user!.sub,
+        ipAddress: req.ip,
+        correlationId: req.correlationId,
+      },
     });
 
     res.json({ success: true, message: '2FA desabilitado' });
@@ -280,9 +299,74 @@ router.get('/sessions', authenticate, async (req: Request, res: Response, next: 
 router.delete('/sessions/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await prisma.session.deleteMany({
-      where: { id: req.params.id, userId: req.user!.sub },
+      where: { id: req.params.id as string, userId: req.user!.sub },
     });
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ══════════════════════════════════════
+// OPENCLAW SECURITY AUDIT
+// ══════════════════════════════════════
+
+// POST /security/openclaw-audit - Run openclaw security audit --deep
+router.post('/openclaw-audit', authenticate, requireRole('ADMIN', 'OPERATOR'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Pick the first instance with a container (or use query param)
+    const instId = req.query.instanceId as string | undefined;
+    const where = instId ? { id: instId } : { containerHost: { not: null as any }, containerName: { not: null as any } };
+    const inst = await prisma.instance.findFirst({ where });
+    if (!inst || !inst.containerHost || !inst.containerName) {
+      return res.status(400).json({ error: { message: 'Nenhuma instância com container disponível' } });
+    }
+
+    const result = await execInContainer(inst.containerHost, inst.containerName, 'openclaw security audit --deep 2>&1');
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.sub,
+        action: 'security.openclaw_audit',
+        resource: 'instance',
+        resourceId: inst.id,
+        details: { output: result.stdout.substring(0, 2000) } as any,
+        ipAddress: req.ip,
+        correlationId: req.correlationId,
+      },
+    });
+
+    res.json({ success: result.exitCode === 0, output: result.stdout, instanceId: inst.id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /security/openclaw-fix - Run openclaw security audit --fix
+router.post('/openclaw-fix', authenticate, requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instId = req.query.instanceId as string | undefined;
+    const where = instId ? { id: instId } : { containerHost: { not: null as any }, containerName: { not: null as any } };
+    const inst = await prisma.instance.findFirst({ where });
+    if (!inst || !inst.containerHost || !inst.containerName) {
+      return res.status(400).json({ error: { message: 'Nenhuma instância com container disponível' } });
+    }
+
+    const result = await execInContainer(inst.containerHost, inst.containerName, 'openclaw security audit --fix 2>&1');
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user!.sub,
+        action: 'security.openclaw_fix',
+        resource: 'instance',
+        resourceId: inst.id,
+        details: { output: result.stdout.substring(0, 2000) } as any,
+        ipAddress: req.ip,
+        correlationId: req.correlationId,
+      },
+    });
+
+    res.json({ success: result.exitCode === 0, output: result.stdout, instanceId: inst.id });
   } catch (err) {
     next(err);
   }

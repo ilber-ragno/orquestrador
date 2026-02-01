@@ -15,3 +15,21 @@ export const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Limiter para operações de execução no container
+export const execLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: { code: 'RATE_LIMIT', message: 'Too many exec requests, try again later' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Limiter para auditoria/security
+export const securityLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 2,
+  message: { error: { code: 'RATE_LIMIT', message: 'Too many security audit requests' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

@@ -29,19 +29,19 @@ async function main() {
 
   // Seed LXC container instances
   const instances = [
-    { name: 'Titan', slug: 'titan', description: 'Container principal de produção', containerName: 'titan', containerHost: '145.223.31.7', containerType: 'production' },
-    { name: 'Orquestrador', slug: 'orquestrador', description: 'Container de orquestração', containerName: 'orquestrador', containerHost: '145.223.31.7', containerType: 'production' },
-    { name: 'Mars', slug: 'mars', description: 'Container Mars', containerName: 'mars', containerHost: '145.223.31.7', containerType: 'staging' },
-    { name: 'Nova', slug: 'nova', description: 'Container Nova', containerName: 'nova', containerHost: '145.223.31.7', containerType: 'staging' },
+    { name: 'Titan', slug: 'titan', description: 'Container principal de produção', containerName: 'titan', containerHost: '145.223.31.7', containerType: 'production', isHidden: false },
+    { name: 'Orquestrador', slug: 'orquestrador', description: 'Container de orquestração', containerName: 'orquestrador', containerHost: '145.223.31.7', containerType: 'production', isHidden: true },
+    { name: 'Mars', slug: 'mars', description: 'Container Mars', containerName: 'mars', containerHost: '145.223.31.7', containerType: 'staging', isHidden: false },
+    { name: 'Nova', slug: 'nova', description: 'Container Nova', containerName: 'nova', containerHost: '145.223.31.7', containerType: 'staging', isHidden: false },
   ];
 
   for (const inst of instances) {
     const instance = await prisma.instance.upsert({
       where: { slug: inst.slug },
-      update: { name: inst.name, description: inst.description, containerName: inst.containerName, containerHost: inst.containerHost, containerType: inst.containerType },
+      update: { name: inst.name, description: inst.description, containerName: inst.containerName, containerHost: inst.containerHost, containerType: inst.containerType, isHidden: inst.isHidden },
       create: inst,
     });
-    console.log(`Seeded instance: ${instance.name} (${instance.slug}) -> LXC: ${instance.containerName}@${instance.containerHost}`);
+    console.log(`Seeded instance: ${instance.name} (${instance.slug}) -> LXC: ${instance.containerName}@${instance.containerHost} [hidden=${instance.isHidden}]`);
   }
 
   // Seed default plan

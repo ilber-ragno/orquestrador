@@ -5,7 +5,9 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
+import { FieldHelp } from '@/components/ui/help-tooltip'
 import {
   Plus,
   Trash2,
@@ -21,6 +23,7 @@ import {
   Link2,
   Brain,
   Globe,
+  Volume2,
   Key,
   X,
   Activity,
@@ -33,7 +36,7 @@ import {
 interface Provider {
   id: string
   instanceId: string
-  type: 'OPENAI' | 'ANTHROPIC' | 'OPENROUTER' | 'CUSTOM'
+  type: 'OPENAI' | 'ANTHROPIC' | 'OPENROUTER' | 'ELEVENLABS' | 'CUSTOM'
   name: string
   apiKey: string
   baseUrl: string | null
@@ -73,7 +76,34 @@ const providerTypeConfig = {
   OPENAI: { label: 'OpenAI', color: 'text-green-400', bg: 'bg-green-400/10', icon: Brain },
   ANTHROPIC: { label: 'Anthropic', color: 'text-orange-400', bg: 'bg-orange-400/10', icon: Brain },
   OPENROUTER: { label: 'OpenRouter', color: 'text-blue-400', bg: 'bg-blue-400/10', icon: Globe },
+  ELEVENLABS: { label: 'ElevenLabs', color: 'text-cyan-400', bg: 'bg-cyan-400/10', icon: Volume2 },
   CUSTOM: { label: 'Custom', color: 'text-purple-400', bg: 'bg-purple-400/10', icon: Link2 },
+}
+
+// Models available per provider type
+const providerModels: Record<string, { value: string; label: string }[]> = {
+  ANTHROPIC: [
+    { value: 'claude-opus-4-20250514', label: 'Claude Opus 4' },
+    { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
+  ],
+  OPENAI: [
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+    { value: 'o3-mini', label: 'o3-mini' },
+    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+  ],
+  OPENROUTER: [
+    { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
+    { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4' },
+    { value: 'openai/gpt-4o', label: 'GPT-4o' },
+    { value: 'google/gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { value: 'meta-llama/llama-3.1-405b-instruct', label: 'Llama 3.1 405B' },
+    { value: 'mistralai/mistral-large', label: 'Mistral Large' },
+  ],
+  ELEVENLABS: [],
+  CUSTOM: [],
 }
 
 const authTypeLabels: Record<string, string> = {
@@ -98,33 +128,33 @@ export default function ConnectionsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Inteligência e APIs</h1>
-        <p className="text-muted-foreground text-sm mt-1">Provedores de IA e integrações externas</p>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Inteligência e APIs</h1>
+        <p className="text-muted-foreground text-xs sm:text-sm mt-1">Provedores de IA e integrações externas</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+      <div className="flex gap-1 p-1 bg-muted rounded-lg w-full sm:w-fit overflow-x-auto">
         <button
           onClick={() => setTab('providers')}
           className={cn(
-            'px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+            'px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 sm:flex-none',
             tab === 'providers' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
           )}
         >
-          <Brain className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
+          <Brain className="h-3.5 w-3.5 inline mr-1 sm:mr-1.5 -mt-0.5" />
           Provedores de IA
         </button>
         <button
           onClick={() => setTab('integrations')}
           className={cn(
-            'px-4 py-1.5 rounded-md text-sm font-medium transition-colors',
+            'px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap flex-1 sm:flex-none',
             tab === 'integrations' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
           )}
         >
-          <Link2 className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />
-          Integrações Externas
+          <Link2 className="h-3.5 w-3.5 inline mr-1 sm:mr-1.5 -mt-0.5" />
+          Integrações
         </button>
       </div>
 
@@ -136,6 +166,7 @@ export default function ConnectionsPage() {
 // --- Providers Panel ---
 
 function ProvidersPanel({ instanceId }: { instanceId: string }) {
+  const toast = useToast()
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -149,11 +180,11 @@ function ProvidersPanel({ instanceId }: { instanceId: string }) {
       const { data } = await api.get(`/instances/${instanceId}/providers`)
       setProviders(data)
     } catch (err) {
-      console.error('Failed to load providers', err)
+      toast.error('Erro ao carregar provedores')
     } finally {
       setLoading(false)
     }
-  }, [instanceId])
+  }, [instanceId, toast])
 
   useEffect(() => { fetchProviders() }, [fetchProviders])
 
@@ -162,8 +193,14 @@ function ProvidersPanel({ instanceId }: { instanceId: string }) {
     try {
       const { data } = await api.post(`/instances/${instanceId}/providers/${provider.id}/test`)
       setTestResults((prev) => ({ ...prev, [provider.id]: data }))
+      if (data.success) {
+        toast.success('Provedor testado com sucesso')
+      } else {
+        toast.error(`Teste falhou: ${data.error || 'Erro desconhecido'}`)
+      }
     } catch {
       setTestResults((prev) => ({ ...prev, [provider.id]: { success: false, latency: 0, error: 'Erro na requisição' } }))
+      toast.error('Erro ao testar conectividade do provedor')
     }
   }
 
@@ -172,14 +209,16 @@ function ProvidersPanel({ instanceId }: { instanceId: string }) {
       await api.delete(`/instances/${instanceId}/providers/${id}`)
       setProviders((prev) => prev.filter((p) => p.id !== id))
       setDeleteConfirm(null)
+      toast.success('Provedor excluído com sucesso')
     } catch (err) {
-      console.error('Failed to delete provider', err)
+      toast.error('Erro ao excluir provedor')
     }
   }
 
   const handleSaved = () => {
     setShowForm(false)
     setEditingProvider(null)
+    toast.success('Provedor salvo com sucesso')
     fetchProviders()
   }
 
@@ -228,14 +267,14 @@ function ProvidersPanel({ instanceId }: { instanceId: string }) {
             const testResult = testResults[prov.id]
             return (
               <Card key={prov.id} className={cn(prov.isDefault && 'ring-1 ring-primary/50')}>
-                <CardContent className="py-4 px-5">
-                  <div className="flex items-start gap-4">
-                    <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center shrink-0', cfg.bg)}>
-                      <cfg.icon className={cn('h-5 w-5', cfg.color)} />
+                <CardContent className="py-3 sm:py-4 px-3 sm:px-5">
+                  <div className="flex items-start gap-2 sm:gap-4">
+                    <div className={cn('h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center shrink-0', cfg.bg)}>
+                      <cfg.icon className={cn('h-4 w-4 sm:h-5 sm:w-5', cfg.color)} />
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                         <h3 className="font-medium text-sm truncate">{prov.name}</h3>
                         {prov.isDefault && (
                           <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium flex items-center gap-0.5">
@@ -247,18 +286,18 @@ function ProvidersPanel({ instanceId }: { instanceId: string }) {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-4 mt-1.5 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Key className="h-3 w-3" /> {prov.apiKey}
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-1.5 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1 truncate">
+                          <Key className="h-3 w-3 shrink-0" /> {prov.apiKey}
                         </span>
                         {prov.model && (
                           <span className="flex items-center gap-1">
-                            <Brain className="h-3 w-3" /> {prov.model}
+                            <Brain className="h-3 w-3 shrink-0" /> {prov.model}
                           </span>
                         )}
                         {prov.baseUrl && (
-                          <span className="flex items-center gap-1 truncate max-w-[200px]">
-                            <Globe className="h-3 w-3" /> {prov.baseUrl}
+                          <span className="flex items-center gap-1 truncate max-w-[180px] sm:max-w-[200px] hidden sm:flex">
+                            <Globe className="h-3 w-3 shrink-0" /> {prov.baseUrl}
                           </span>
                         )}
                       </div>
@@ -403,7 +442,9 @@ function ProviderForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <Label className="text-xs text-muted-foreground">Tipo</Label>
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                Tipo <FieldHelp field="connections.provider.type" />
+              </Label>
               <select
                 className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
                 value={form.type}
@@ -412,6 +453,7 @@ function ProviderForm({
                 <option value="ANTHROPIC">Anthropic</option>
                 <option value="OPENAI">OpenAI</option>
                 <option value="OPENROUTER">OpenRouter</option>
+                <option value="ELEVENLABS">ElevenLabs (TTS)</option>
                 <option value="CUSTOM">Custom</option>
               </select>
             </div>
@@ -420,19 +462,22 @@ function ProviderForm({
               <Input className="mt-1" placeholder="Claude Principal" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">API Key {provider && <span className="text-muted-foreground/50">(deixe vazio para manter)</span>}</Label>
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                API Key <FieldHelp field="connections.provider.apiKey" /> {provider && <span className="text-muted-foreground/50">(deixe vazio para manter)</span>}
+              </Label>
               <Input className="mt-1" type="password" placeholder="sk-..." value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} required={!provider} />
             </div>
+            <ModelSelector type={form.type} value={form.model} onChange={(v) => setForm({ ...form, model: v })} />
             <div>
-              <Label className="text-xs text-muted-foreground">Modelo (opcional)</Label>
-              <Input className="mt-1" placeholder="claude-sonnet-4-20250514" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Base URL (opcional)</Label>
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                Base URL (opcional) <FieldHelp field="connections.provider.baseUrl" />
+              </Label>
               <Input className="mt-1" placeholder="https://api.anthropic.com" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Prioridade</Label>
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                Prioridade <FieldHelp field="connections.provider.priority" />
+              </Label>
               <Input className="mt-1" type="number" min={0} value={form.priority} onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value) || 0 })} />
             </div>
           </div>
@@ -445,7 +490,9 @@ function ProviderForm({
               onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
               className="rounded border-input"
             />
-            <Label htmlFor="isDefault" className="text-sm cursor-pointer">Definir como provedor padrão</Label>
+            <Label htmlFor="isDefault" className="text-sm cursor-pointer flex items-center gap-1">
+              Definir como provedor padrão <FieldHelp field="connections.provider.isDefault" />
+            </Label>
           </div>
 
           {error && (
@@ -467,9 +514,62 @@ function ProviderForm({
   )
 }
 
+// --- Model Selector ---
+
+function ModelSelector({ type, value, onChange }: { type: string; value: string; onChange: (v: string) => void }) {
+  const models = providerModels[type] || []
+  const [customMode, setCustomMode] = useState(!models.length || (!!value && !models.some(m => m.value === value)))
+
+  useEffect(() => {
+    const m = providerModels[type] || []
+    if (!m.length) {
+      setCustomMode(true)
+    } else if (!value || m.some(mv => mv.value === value)) {
+      setCustomMode(false)
+    }
+  }, [type, value])
+
+  if (!models.length) {
+    return (
+      <div>
+        <Label className="text-xs text-muted-foreground">Modelo (opcional)</Label>
+        <Input className="mt-1" placeholder={type === 'ELEVENLABS' ? 'N/A (TTS)' : 'nome-do-modelo'} value={value} onChange={(e) => onChange(e.target.value)} />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <Label className="text-xs text-muted-foreground">Modelo</Label>
+      <select
+        className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+        value={customMode ? '_custom' : value}
+        onChange={(e) => {
+          if (e.target.value === '_custom') {
+            setCustomMode(true)
+            onChange('')
+          } else {
+            setCustomMode(false)
+            onChange(e.target.value)
+          }
+        }}
+      >
+        {models.map((m) => (
+          <option key={m.value} value={m.value}>{m.label}</option>
+        ))}
+        <option value="_custom">Outro (digitar manualmente)</option>
+      </select>
+      {customMode && (
+        <Input className="mt-1" placeholder="nome-do-modelo" value={value} onChange={(e) => onChange(e.target.value)} />
+      )}
+    </div>
+  )
+}
+
 // --- Integrations Panel ---
 
 function IntegrationsPanel({ instanceId }: { instanceId: string }) {
+  const toast = useToast()
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -481,11 +581,11 @@ function IntegrationsPanel({ instanceId }: { instanceId: string }) {
       const { data } = await api.get(`/instances/${instanceId}/integrations`)
       setIntegrations(data)
     } catch (err) {
-      console.error('Failed to load integrations', err)
+      toast.error('Erro ao carregar integrações')
     } finally {
       setLoading(false)
     }
-  }, [instanceId])
+  }, [instanceId, toast])
 
   useEffect(() => { fetchIntegrations() }, [fetchIntegrations])
 
@@ -494,13 +594,15 @@ function IntegrationsPanel({ instanceId }: { instanceId: string }) {
       await api.delete(`/instances/${instanceId}/integrations/${id}`)
       setIntegrations((prev) => prev.filter((i) => i.id !== id))
       setDeleteConfirm(null)
+      toast.success('Integração excluída com sucesso')
     } catch (err) {
-      console.error('Failed to delete integration', err)
+      toast.error('Erro ao excluir integração')
     }
   }
 
   const handleSaved = () => {
     setShowForm(false)
+    toast.success('Integração salva com sucesso')
     fetchIntegrations()
   }
 
@@ -666,7 +768,9 @@ function IntegrationForm({
               <Input className="mt-1" placeholder="WASender API" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Base URL</Label>
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                Base URL <FieldHelp field="connections.provider.baseUrl" />
+              </Label>
               <Input className="mt-1" placeholder="https://api.example.com" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} required />
             </div>
             <div>

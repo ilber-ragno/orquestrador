@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -21,7 +22,7 @@ router.get('/', authenticate, async (_req: Request, res: Response, next: NextFun
 router.get('/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const plan = await prisma.plan.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       include: { usages: { orderBy: { period: 'desc' }, take: 12 } },
     });
     if (!plan) return res.status(404).json({ error: { message: 'Plan not found' } });
@@ -60,13 +61,27 @@ router.post('/', authenticate, requireRole('ADMIN'), async (req: Request, res: R
 });
 
 // PUT /plans/:id - Update plan
+const updatePlanSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).optional().nullable(),
+  maxMessages: z.number().int().min(0).optional().nullable(),
+  maxSessions: z.number().int().min(0).optional().nullable(),
+  maxTokens: z.number().int().min(0).optional().nullable(),
+  maxCostCents: z.number().int().min(0).optional().nullable(),
+  maxChannels: z.number().int().min(0).optional().nullable(),
+  maxProviders: z.number().int().min(0).optional().nullable(),
+  blockOnExceed: z.boolean().optional(),
+  fallbackAction: z.string().optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
 router.put('/:id', authenticate, requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, description, maxMessages, maxSessions, maxTokens, maxCostCents, maxChannels, maxProviders, blockOnExceed, fallbackAction, isActive } = req.body;
+    const data = updatePlanSchema.parse(req.body);
 
     const plan = await prisma.plan.update({
-      where: { id: req.params.id },
-      data: { name, description, maxMessages, maxSessions, maxTokens, maxCostCents, maxChannels, maxProviders, blockOnExceed, fallbackAction, isActive },
+      where: { id: req.params.id as string },
+      data: data as any,
     });
 
     await prisma.auditLog.create({
@@ -90,7 +105,7 @@ router.put('/:id', authenticate, requireRole('ADMIN'), async (req: Request, res:
 // DELETE /plans/:id
 router.delete('/:id', authenticate, requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await prisma.plan.delete({ where: { id: req.params.id } });
+    await prisma.plan.delete({ where: { id: req.params.id as string } });
     res.json({ success: true });
   } catch (err) {
     next(err);
@@ -101,8 +116,8 @@ router.delete('/:id', authenticate, requireRole('ADMIN'), async (req: Request, r
 router.post('/:id/assign/:instanceId', authenticate, requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     await prisma.instance.update({
-      where: { id: req.params.instanceId },
-      data: { planId: req.params.id },
+      where: { id: req.params.instanceId as string },
+      data: { planId: req.params.id as string },
     });
 
     await prisma.auditLog.create({
@@ -110,14 +125,14 @@ router.post('/:id/assign/:instanceId', authenticate, requireRole('ADMIN'), async
         userId: req.user!.sub,
         action: 'plan.assign',
         resource: 'plan',
-        resourceId: req.params.id,
-        details: { instanceId: req.params.instanceId } as any,
+        resourceId: req.params.id as string,
+        details: { instanceId: req.params.instanceId as string } as any,
         ipAddress: req.ip,
         correlationId: req.correlationId,
       },
     });
 
-    res.json({ success: true, planId: req.params.id, instanceId: req.params.instanceId });
+    res.json({ success: true, planId: req.params.id as string, instanceId: req.params.instanceId as string });
   } catch (err) {
     next(err);
   }
@@ -126,7 +141,7 @@ router.post('/:id/assign/:instanceId', authenticate, requireRole('ADMIN'), async
 // GET /plans/usage/:instanceId - Get usage for instance
 router.get('/usage/:instanceId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId } });
+    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId as string } });
     if (!inst) return res.status(404).json({ error: { message: 'Instance not found' } });
 
     const period = new Date().toISOString().slice(0, 7); // YYYY-MM

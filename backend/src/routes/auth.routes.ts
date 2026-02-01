@@ -10,6 +10,7 @@ const router = Router();
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  totpCode: z.string().length(6).regex(/^\d+$/).optional(),
 });
 
 router.post('/login', loginLimiter, validate(loginSchema), async (req: Request, res: Response, next: NextFunction) => {
@@ -17,6 +18,7 @@ router.post('/login', loginLimiter, validate(loginSchema), async (req: Request, 
     const { accessToken, refreshToken, user } = await authService.login(
       req.body.email,
       req.body.password,
+      req.body.totpCode,
       req.headers['user-agent'],
       req.ip,
       req.correlationId,

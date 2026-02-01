@@ -1,8 +1,20 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { authenticate, requireRole } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
 import { prisma } from '../lib/prisma.js';
 import * as lxc from '../services/lxc.service.js';
 import * as jobService from '../services/job.service.js';
+
+// Shell metacharacters that could enable command injection
+const DANGEROUS_CHARS = /[;&|`$(){}[\]<>!\\]/;
+
+const execSchema = z.object({
+  command: z.string().min(1).max(2000).refine(
+    (cmd) => !DANGEROUS_CHARS.test(cmd),
+    { message: 'Command contains prohibited shell metacharacters' },
+  ),
+});
 
 const router = Router();
 
@@ -46,7 +58,7 @@ router.get('/', authenticate, async (_req: Request, res: Response, next: NextFun
 // GET /containers/:instanceId/status - Container status for instance
 router.get('/:instanceId/status', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId } });
+    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId as string } });
     if (!inst || !inst.containerName || !inst.containerHost) {
       return res.status(404).json({ error: { message: 'Instance has no container mapping' } });
     }
@@ -70,7 +82,7 @@ router.post(
         return res.status(400).json({ error: { message: 'Invalid action. Use start, stop, or restart' } });
       }
 
-      const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId } });
+      const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId as string } });
       if (!inst || !inst.containerName || !inst.containerHost) {
         return res.status(404).json({ error: { message: 'Instance has no container mapping' } });
       }
@@ -122,15 +134,15 @@ router.post(
   '/:instanceId/exec',
   authenticate,
   requireRole('ADMIN'),
+  validate(execSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId } });
+      const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId as string } });
       if (!inst || !inst.containerName || !inst.containerHost) {
         return res.status(404).json({ error: { message: 'Instance has no container mapping' } });
       }
 
-      const { command } = req.body;
-      if (!command) return res.status(400).json({ error: { message: 'command is required' } });
+      const { command } = req.body as z.infer<typeof execSchema>;
 
       const result = await lxc.execInContainer(inst.containerHost, inst.containerName, command);
 
@@ -156,7 +168,7 @@ router.post(
 // GET /containers/:instanceId/logs - Get container logs
 router.get('/:instanceId/logs', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId } });
+    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId as string } });
     if (!inst || !inst.containerName || !inst.containerHost) {
       return res.status(404).json({ error: { message: 'Instance has no container mapping' } });
     }
@@ -172,7 +184,7 @@ router.get('/:instanceId/logs', authenticate, async (req: Request, res: Response
 // GET /containers/:instanceId/services - List services in container
 router.get('/:instanceId/services', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId } });
+    const inst = await prisma.instance.findUnique({ where: { id: req.params.instanceId as string } });
     if (!inst || !inst.containerName || !inst.containerHost) {
       return res.status(404).json({ error: { message: 'Instance has no container mapping' } });
     }

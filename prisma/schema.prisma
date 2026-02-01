@@ -32,6 +32,11 @@ model User {
   sessions  Session[]
   auditLogs AuditLog[]
 
+  // CPR Protocol relations
+  assignedProtocols  Protocol[]        @relation("AssignedProtocols")
+  closedProtocols    Protocol[]        @relation("ClosedProtocols")
+  protocolMessages   ProtocolMessage[]
+
   @@map("users")
 }
 
@@ -79,6 +84,8 @@ model Instance {
   description     String?
   status          String   @default("stopped")
   configPath      String?  @map("config_path")
+  isHidden        Boolean  @default(false) @map("is_hidden")
+  readyForProduction Boolean @default(false) @map("ready_for_production")
   // LXC container mapping
   containerName   String?  @map("container_name")
   containerHost   String?  @map("container_host")
@@ -94,10 +101,15 @@ model Instance {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  configs         InstanceConfig[]
-  configHistory   ConfigHistory[]
-  providers       Provider[]
-  apiIntegrations ApiIntegration[]
+  configs           InstanceConfig[]
+  configHistory     ConfigHistory[]
+  providers         Provider[]
+  apiIntegrations   ApiIntegration[]
+  agents            Agent[]
+  channels          Channel[]
+  webhookEndpoints  WebhookEndpoint[]
+  contactCache      ContactCache[]
+  protocols         Protocol[]
 
   @@map("instances")
 }
@@ -131,6 +143,7 @@ model ConfigHistory {
 
   @@index([instanceId])
   @@index([createdAt])
+  @@index([changedBy])
   @@map("config_history")
 }
 
@@ -138,6 +151,7 @@ enum ProviderType {
   OPENAI
   ANTHROPIC
   OPENROUTER
+  ELEVENLABS
   CUSTOM
 }
 
@@ -160,6 +174,8 @@ model Provider {
   instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@index([instanceId])
+  @@index([isDefault])
+  @@index([priority])
   @@map("providers")
 }
 
@@ -284,6 +300,120 @@ model PlanUsage {
 }
 
 // ═══════════════════════════════════════
+// AGENTS
+// ═══════════════════════════════════════
+
+model Agent {
+  id           String   @id @default(cuid())
+  instanceId   String   @map("instance_id")
+  name         String
+  description  String?
+  systemPrompt String?  @map("system_prompt") @db.Text
+  model         String?
+  fallbackModel String?  @map("fallback_model")
+  isDefault     Boolean  @default(false) @map("is_default")
+  isActive     Boolean  @default(true) @map("is_active")
+  personality  Json?
+  emoji         String?
+  avatar        String?
+  theme         String?
+  bindings      Json?
+  sandbox       Json?
+  toolsAllow    Json?     @map("tools_allow")
+  toolsDeny     Json?     @map("tools_deny")
+  workspacePath String?   @map("workspace_path")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@map("agents")
+}
+
+// ═══════════════════════════════════════
+// CHANNELS
+// ═══════════════════════════════════════
+
+enum ChannelType {
+  WHATSAPP
+  TELEGRAM
+  SLACK
+  DISCORD
+  TEAMS
+  GOOGLE_CHAT
+  MATRIX
+  MATTERMOST
+  NEXTCLOUD
+  LINE
+  WEBHOOK
+  CLI
+  WEB
+  API
+  IMESSAGE
+  SIGNAL
+}
+
+model Channel {
+  id         String      @id @default(cuid())
+  instanceId String      @map("instance_id")
+  type       ChannelType
+  name       String
+  config     Json?
+  status     String      @default("disconnected")
+  isActive   Boolean     @default(true) @map("is_active")
+  dmPolicy   String      @default("open") @map("dm_policy")      // pairing | allowlist | open | disabled
+  allowFrom  Json        @default("[]") @map("allow_from")        // E.164 numbers or IDs
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@map("channels")
+}
+
+// ═══════════════════════════════════════
+// WEBHOOKS
+// ═══════════════════════════════════════
+
+model WebhookEndpoint {
+  id         String   @id @default(cuid())
+  instanceId String   @map("instance_id")
+  url        String
+  secret     String?
+  events     Json     @default("[]")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  logs     WebhookLog[]
+
+  @@index([instanceId])
+  @@map("webhook_endpoints")
+}
+
+model WebhookLog {
+  id         String   @id @default(cuid())
+  endpointId String   @map("endpoint_id")
+  eventType  String   @map("event_type")
+  payload    Json?
+  statusCode Int?     @map("status_code")
+  response   String?  @db.Text
+  retries    Int      @default(0)
+  success    Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId])
+  @@index([createdAt])
+  @@index([success])
+  @@map("webhook_logs")
+}
+
+// ═══════════════════════════════════════
 // SETUP PROGRESS
 // ═══════════════════════════════════════
 
@@ -298,4 +428,177 @@ model SetupProgress {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("setup_progress")
+}
+
+// ═══════════════════════════════════════
+// CONTACT CACHE (WhatsApp profile data)
+// ═══════════════════════════════════════
+
+model ContactCache {
+  id            String   @id @default(cuid())
+  instanceId    String   @map("instance_id")
+  contactId     String   @map("contact_id")
+  displayName   String?  @map("display_name")
+  profilePicUrl String?  @map("profile_pic_url")
+  phone         String?
+  lastFetched   DateTime @default(now()) @map("last_fetched")
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([instanceId, contactId])
+  @@index([instanceId])
+  @@map("contact_cache")
+}
+
+// ═══════════════════════════════════════
+// CPR — SISTEMA DE PROTOCOLOS
+// ═══════════════════════════════════════
+
+enum ProtocolStatus {
+  ACTIVE
+  ESCALATED
+  ASSIGNED
+  IN_PROGRESS
+  PENDING_CLOSURE
+  CLOSED
+}
+
+enum AttendanceMode {
+  AI_ONLY
+  MODE_A
+  MODE_B
+}
+
+enum ProtocolMessageType {
+  INTERNAL
+  DIRECT
+  NOTE
+  SYSTEM
+}
+
+enum ProtocolAuditAction {
+  CREATED
+  ESCALATED
+  ASSIGNED
+  MODE_CHANGED
+  MESSAGE_SENT
+  NOTE_ADDED
+  TAKEOVER
+  RETURNED_TO_AI
+  CLOSED
+  SURVEY_SENT
+  SURVEY_ANSWERED
+  TRANSFERRED
+}
+
+model Protocol {
+  id               String          @id @default(cuid())
+  number           String          @unique
+  instanceId       String          @map("instance_id")
+  sessionId        String          @map("session_id")
+  contactId        String          @map("contact_id")
+  contactName      String?         @map("contact_name")
+  channel          String
+  status           ProtocolStatus  @default(ACTIVE)
+  mode             AttendanceMode  @default(AI_ONLY)
+  assignedTo       String?         @map("assigned_to")
+  escalationReason String?         @map("escalation_reason")
+  escalatedAt      DateTime?       @map("escalated_at")
+  assignedAt       DateTime?       @map("assigned_at")
+  closedAt         DateTime?       @map("closed_at")
+  closedBy         String?         @map("closed_by")
+  closureReason    String?         @map("closure_reason")
+  closureResult    String?         @map("closure_result") @db.Text
+  tags             Json            @default("[]")
+  metadata         Json?
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  instance       Instance           @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  assignedUser   User?              @relation("AssignedProtocols", fields: [assignedTo], references: [id])
+  closedByUser   User?              @relation("ClosedProtocols", fields: [closedBy], references: [id])
+  messages       ProtocolMessage[]
+  survey         SatisfactionSurvey?
+  learningPackets LearningPacket[]
+  auditEntries   ProtocolAudit[]
+
+  @@index([instanceId])
+  @@index([sessionId])
+  @@index([contactId])
+  @@index([assignedTo])
+  @@index([status])
+  @@index([createdAt])
+  @@map("protocols")
+}
+
+model ProtocolMessage {
+  id         String              @id @default(cuid())
+  protocolId String              @map("protocol_id")
+  userId     String?             @map("user_id")
+  type       ProtocolMessageType
+  content    String              @db.Text
+  metadata   Json?
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  protocol Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@index([protocolId])
+  @@index([createdAt])
+  @@map("protocol_messages")
+}
+
+model SatisfactionSurvey {
+  id         String    @id @default(cuid())
+  protocolId String    @unique @map("protocol_id")
+  rating     Int?
+  comment    String?   @db.Text
+  sentAt     DateTime  @default(now()) @map("sent_at")
+  answeredAt DateTime? @map("answered_at")
+
+  protocol Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  @@map("satisfaction_surveys")
+}
+
+model LearningPacket {
+  id               String   @id @default(cuid())
+  protocolId       String   @map("protocol_id")
+  instanceId       String   @map("instance_id")
+  escalationReason String   @map("escalation_reason")
+  aiContext        String   @db.Text @map("ai_context")
+  humanResponse    String   @db.Text @map("human_response")
+  resolution       String?  @db.Text
+  tags             Json     @default("[]")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  protocol Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@index([createdAt])
+  @@map("learning_packets")
+}
+
+model ProtocolAudit {
+  id         String              @id @default(cuid())
+  protocolId String              @map("protocol_id")
+  userId     String?             @map("user_id")
+  action     ProtocolAuditAction
+  details    Json?
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  protocol Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  @@index([protocolId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("protocol_audit")
+}
+
+model ProtocolSequence {
+  id      String @id @default("singleton")
+  year    Int
+  lastNum Int    @default(0) @map("last_num")
+
+  @@map("protocol_sequence")
 }

@@ -22,9 +22,9 @@ router.get('/', authenticate, async (req: Request, res: Response, next: NextFunc
 // GET /services/:name/status - Detailed service status
 router.get('/:name/status', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const info = await systemService.getServiceStatus(req.params.name);
+    const info = await systemService.getServiceStatus(req.params.name as string);
     if (!info) {
-      return next(new AppError(404, 'NOT_FOUND', `Service '${req.params.name}' not found`));
+      return next(new AppError(404, 'NOT_FOUND', `Service '${req.params.name as string}' not found`));
     }
     res.json(info);
   } catch (err) {
@@ -41,7 +41,8 @@ router.post(
   requireRole('ADMIN', 'OPERATOR'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { name, action } = req.params;
+      const name = req.params.name as string;
+      const action = req.params.action as string;
       const validActions = ['start', 'stop', 'restart', 'enable', 'disable'];
       if (!validActions.includes(action)) {
         return next(new AppError(400, 'INVALID_ACTION', `Invalid action '${action}'. Valid: ${validActions.join(', ')}`));

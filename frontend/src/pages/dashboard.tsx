@@ -4,6 +4,7 @@ import { useInstance } from '@/context/instance-context'
 import { api } from '@/lib/api-client'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import {
   Activity,
   Server,
@@ -22,6 +23,12 @@ import {
   CheckCircle2,
   XCircle,
   Container,
+  BadgeCheck,
+  AlertTriangle,
+  Terminal,
+  Brain,
+  MessageSquare,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -70,19 +77,67 @@ function formatBytes(bytes: number): string {
 export default function DashboardPage() {
   const { user } = useAuth()
   const { instances, selectedInstance, instanceStatus, statusLoading, refreshStatus, refreshInstances } = useInstance()
+  const toast = useToast()
   const [containers, setContainers] = useState<ContainerData[]>([])
   const [containersLoading, setContainersLoading] = useState(false)
+  const [validation, setValidation] = useState<{ checks: { name: string; status: string; message?: string; detail?: string }[] } | null>(null)
+  const [validating, setValidating] = useState(false)
+  const [openclawInfo, setOpenclawInfo] = useState<{ version?: string; gatewayStatus?: string; gatewayPid?: string; gatewayUptime?: string; activeSessions?: string; model?: string; messagesProcessed?: string } | null>(null)
+  const [openclawLoading, setOpenclawLoading] = useState(false)
+  const [termCmd, setTermCmd] = useState('')
+  const [termOutput, setTermOutput] = useState('')
+  const [termLoading, setTermLoading] = useState(false)
 
   const fetchContainers = useCallback(async () => {
     setContainersLoading(true)
     try {
       const { data } = await api.get('/containers')
       setContainers(data)
-    } catch {}
+    } catch (err) {
+      toast.error('Falha ao carregar containers')
+    }
     finally { setContainersLoading(false) }
-  }, [])
+  }, [toast])
 
   useEffect(() => { fetchContainers() }, [fetchContainers])
+
+  const fetchOpenclawInfo = useCallback(async () => {
+    if (!selectedInstance) return
+    setOpenclawLoading(true)
+    try {
+      const { data } = await api.get(`/instances/${selectedInstance.id}/openclaw-info`)
+      setOpenclawInfo(data)
+    } catch { /* ignore */ }
+    finally { setOpenclawLoading(false) }
+  }, [selectedInstance])
+
+  useEffect(() => { fetchOpenclawInfo() }, [fetchOpenclawInfo])
+
+  const runTerminalCmd = async () => {
+    if (!termCmd.trim() || !selectedInstance) return
+    setTermLoading(true)
+    try {
+      const { data } = await api.post(`/instances/${selectedInstance.id}/openclaw-exec`, { command: termCmd.trim() })
+      setTermOutput(data.output || data.stdout || 'Sem saída')
+    } catch (err: any) {
+      setTermOutput(err?.response?.data?.error?.message || 'Erro ao executar comando')
+    }
+    finally { setTermLoading(false) }
+  }
+
+  const handleValidate = useCallback(async () => {
+    if (!selectedInstance) return
+    setValidating(true)
+    try {
+      const { data } = await api.get(`/instances/${selectedInstance.id}/clawdbot/validate`)
+      setValidation(data)
+    } catch (err) {
+      toast.error('Falha ao validar ambiente do Clawdbot')
+    }
+    finally { setValidating(false) }
+  }, [selectedInstance, toast])
+
+  useEffect(() => { setValidation(null) }, [selectedInstance])
 
   const handleRefresh = () => {
     refreshStatus()
@@ -230,9 +285,9 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <StatusBadge status="online" label="OK" />
+              <StatusBadge status="online" label="Configurado" />
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Você está conectado</p>
+            <p className="text-xs text-muted-foreground mt-2">Autenticação ativa</p>
           </CardContent>
         </Card>
       </div>
@@ -280,6 +335,125 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* OpenClaw Validation */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BadgeCheck className="h-4 w-4" />
+                  Validação do Clawdbot
+                </CardTitle>
+                <CardDescription>Checklist do ambiente</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleValidate} disabled={validating || !selectedInstance}>
+                {validating ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Validar'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!validation && !validating && (
+              <p className="text-sm text-muted-foreground text-center py-4">Clique em "Validar" para verificar o ambiente</p>
+            )}
+            {validating && (
+              <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+            )}
+            {validation && (
+              <div className="space-y-1.5">
+                {validation.checks.map((check, i) => (
+                  <div key={i} className="flex items-center justify-between py-1">
+                    <div className="flex items-center gap-2 text-sm">
+                      {check.status === 'ok' ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
+                      ) : check.status === 'warning' ? (
+                        <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5 text-error shrink-0" />
+                      )}
+                      <span className="text-muted-foreground">{check.name}</span>
+                    </div>
+                    <span className={cn('text-xs', check.status === 'ok' ? 'text-success' : check.status === 'warning' ? 'text-warning' : 'text-error')}>
+                      {(() => { const msg = check.message || check.detail || ''; return msg.length > 40 ? msg.substring(0, 40) + '...' : msg })()}
+                    </span>
+                  </div>
+                ))}
+                {validation.checks.length > 0 && (
+                  <div className="pt-2 border-t border-border">
+                    <div className="flex items-center gap-2">
+                      {validation.checks.every(c => c.status === 'ok') ? (
+                        <>
+                          <BadgeCheck className="h-4 w-4 text-success" />
+                          <span className="text-sm font-medium text-success">Pronto para operacao</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="h-4 w-4 text-warning" />
+                          <span className="text-sm font-medium text-warning">
+                            {validation.checks.filter(c => c.status !== 'ok').length} item(s) pendente(s)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* OpenClaw Info */}
+      {selectedInstance && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Brain className="h-5 w-5" /> OpenClaw
+            {openclawLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <Card>
+              <CardContent className="pt-3 pb-3 px-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Versão</p>
+                <p className="text-sm font-medium mt-0.5">{openclawInfo?.version || 'N/A'}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-3 pb-3 px-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Gateway</p>
+                <p className={cn('text-sm font-medium mt-0.5', openclawInfo?.gatewayStatus === 'running' ? 'text-success' : 'text-muted-foreground')}>
+                  {openclawInfo?.gatewayStatus || 'N/A'}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-3 pb-3 px-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Uptime</p>
+                <p className="text-sm font-medium mt-0.5">{openclawInfo?.gatewayUptime || 'N/A'}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-3 pb-3 px-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Sessões</p>
+                <p className="text-sm font-medium mt-0.5">{openclawInfo?.activeSessions || '0'}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-3 pb-3 px-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Modelo</p>
+                <p className="text-sm font-medium mt-0.5 truncate" title={openclawInfo?.model}>{openclawInfo?.model || 'N/A'}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-3 pb-3 px-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Mensagens</p>
+                <p className="text-sm font-medium mt-0.5">{openclawInfo?.messagesProcessed || '0'}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Config */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Config + First Steps */}
         <Card>
           <CardHeader>
@@ -340,6 +514,44 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Terminal OpenClaw */}
+      {selectedInstance && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Terminal className="h-4 w-4" /> Terminal OpenClaw
+            </CardTitle>
+            <CardDescription>Execute comandos slash no container ({selectedInstance.containerName})</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex gap-2 flex-wrap">
+              {['/status', '/model list', '/channels status', '/doctor', '/probe'].map(cmd => (
+                <Button key={cmd} variant="outline" size="sm" className="text-xs h-7" onClick={() => { setTermCmd(cmd); }}>
+                  {cmd}
+                </Button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 h-9 rounded-md border border-input bg-transparent px-3 text-sm font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                placeholder="openclaw <comando> ou /slash-command"
+                value={termCmd}
+                onChange={e => setTermCmd(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && runTerminalCmd()}
+              />
+              <Button size="sm" onClick={runTerminalCmd} disabled={termLoading || !termCmd.trim()}>
+                {termLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Executar'}
+              </Button>
+            </div>
+            {termOutput && (
+              <div className="bg-muted rounded-md p-3 max-h-64 overflow-auto">
+                <pre className="text-xs font-mono whitespace-pre-wrap">{termOutput}</pre>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

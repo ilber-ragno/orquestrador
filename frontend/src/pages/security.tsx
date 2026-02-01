@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { useToast } from '@/components/ui/toast'
+import { FieldHelp } from '@/components/ui/help-tooltip'
 import {
   ShieldCheck,
   Users,
@@ -35,7 +37,26 @@ const roleBadge: Record<string, string> = {
 }
 
 export default function SecurityPage() {
-  const [tab, setTab] = useState<'users' | 'mfa' | 'sessions' | 'password'>('users')
+  const [tab, setTab] = useState<'users' | 'mfa' | 'sessions' | 'password' | 'audit'>('users')
+  const [auditResult, setAuditResult] = useState<string | null>(null)
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [fixLoading, setFixLoading] = useState(false)
+  const toast = useToast()
+
+  const runAudit = async (fix = false) => {
+    fix ? setFixLoading(true) : setAuditLoading(true)
+    try {
+      const endpoint = fix ? 'openclaw-fix' : 'openclaw-audit'
+      const { data } = await api.post(`/security/${endpoint}`)
+      setAuditResult(data.output || data.message || 'Concluído')
+      if (fix) toast.success('Correções aplicadas')
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error?.message || 'Erro ao executar auditoria')
+    } finally {
+      setAuditLoading(false)
+      setFixLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -44,7 +65,7 @@ export default function SecurityPage() {
         <p className="text-muted-foreground text-sm mt-1">Usuários, permissões e autenticação</p>
       </div>
       <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit flex-wrap">
-        {[{ k: 'users', l: 'Usuários', i: Users }, { k: 'mfa', l: '2FA', i: Smartphone }, { k: 'sessions', l: 'Sessões', i: Eye }, { k: 'password', l: 'Senha', i: Key }].map(({ k, l, i: Icon }) => (
+        {[{ k: 'users', l: 'Usuários', i: Users }, { k: 'mfa', l: '2FA', i: Smartphone }, { k: 'sessions', l: 'Sessões', i: Eye }, { k: 'password', l: 'Senha', i: Key }, { k: 'audit', l: 'Auditoria OpenClaw', i: ShieldCheck }].map(({ k, l, i: Icon }) => (
           <button key={k} onClick={() => setTab(k as any)} className={cn('px-3 py-1.5 rounded-md text-sm font-medium transition-colors', tab === k ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
             <Icon className="h-3.5 w-3.5 inline mr-1.5 -mt-0.5" />{l}
           </button>
@@ -54,11 +75,50 @@ export default function SecurityPage() {
       {tab === 'mfa' && <MfaPanel />}
       {tab === 'sessions' && <SessionsPanel />}
       {tab === 'password' && <PasswordPanel />}
+      {tab === 'audit' && (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Auditoria de Segurança OpenClaw</CardTitle>
+              <CardDescription>Executa verificação profunda de segurança na instância selecionada via <code>openclaw security audit</code></CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Button size="sm" className="gap-2" onClick={() => runAudit(false)} disabled={auditLoading || fixLoading}>
+                  {auditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+                  Executar Auditoria
+                </Button>
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => runAudit(true)} disabled={auditLoading || fixLoading}>
+                  {fixLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                  Corrigir Automaticamente
+                </Button>
+              </div>
+              {auditResult && (
+                <div className="bg-muted rounded-md p-4 max-h-96 overflow-auto">
+                  <pre className="text-xs font-mono whitespace-pre-wrap">{auditResult}</pre>
+                </div>
+              )}
+              <div className="border-t border-border pt-4">
+                <h3 className="text-sm font-medium mb-2">Checklist de Resposta a Incidentes</h3>
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  <li className="flex items-start gap-2"><AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-warning" /> Revogar tokens comprometidos imediatamente</li>
+                  <li className="flex items-start gap-2"><AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-warning" /> Rotacionar API keys de providers afetados</li>
+                  <li className="flex items-start gap-2"><AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-warning" /> Verificar logs de auditoria para atividade suspeita</li>
+                  <li className="flex items-start gap-2"><AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-warning" /> Desconectar canais comprometidos</li>
+                  <li className="flex items-start gap-2"><AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-warning" /> Rotacionar gateway token e senha</li>
+                  <li className="flex items-start gap-2"><AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-warning" /> Revisar elevated access e allowlists</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
 
 function UsersPanel() {
+  const toast = useToast()
   const [users, setUsers] = useState<UserItem[]>([])
   const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -68,25 +128,42 @@ function UsersPanel() {
 
   const fetch = useCallback(async () => {
     setLoading(true)
-    try { const { data } = await api.get('/security/users'); setUsers(data) } catch {}
+    try { const { data } = await api.get('/security/users'); setUsers(data) }
+    catch (err) { toast.error('Falha ao carregar usuários') }
     finally { setLoading(false) }
-  }, [])
+  }, [toast])
 
   useEffect(() => { fetch() }, [fetch])
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError('')
-    try { await api.post('/security/users', form); setShowForm(false); setForm({ email: '', name: '', password: '', role: 'CLIENT' }); fetch() }
+    try {
+      await api.post('/security/users', form)
+      toast.success('Usuário criado com sucesso')
+      setShowForm(false)
+      setForm({ email: '', name: '', password: '', role: 'CLIENT' })
+      fetch()
+    }
     catch (err: any) { setError(err.response?.data?.error?.message || 'Erro') }
     finally { setSaving(false) }
   }
 
   const handleUnlock = async (id: string) => {
-    try { await api.post(`/security/users/${id}/unlock`); fetch() } catch {}
+    try {
+      await api.post(`/security/users/${id}/unlock`)
+      toast.success('Usuário desbloqueado com sucesso')
+      fetch()
+    }
+    catch (err) { toast.error('Falha ao desbloquear usuário') }
   }
 
   const handleToggle = async (id: string, isActive: boolean) => {
-    try { await api.put(`/security/users/${id}`, { isActive: !isActive }); fetch() } catch {}
+    try {
+      await api.put(`/security/users/${id}`, { isActive: !isActive })
+      toast.success(`Usuário ${!isActive ? 'ativado' : 'desativado'} com sucesso`)
+      fetch()
+    }
+    catch (err) { toast.error('Falha ao alterar status do usuário') }
   }
 
   return (
@@ -111,7 +188,7 @@ function UsersPanel() {
                 <div><Label className="text-xs">Email</Label><Input className="mt-1" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required /></div>
                 <div><Label className="text-xs">Nome</Label><Input className="mt-1" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></div>
                 <div><Label className="text-xs">Senha</Label><Input className="mt-1" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required placeholder="Min 8 chars, Aa1" /></div>
-                <div><Label className="text-xs">Role</Label><select className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+                <div><Label className="text-xs flex items-center gap-1.5">Role <FieldHelp field="security.users.role" /></Label><select className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
                   <option value="CLIENT">Cliente</option><option value="OPERATOR">Operador</option><option value="AUDITOR">Auditor</option><option value="ADMIN">Admin</option>
                 </select></div>
               </div>
@@ -136,8 +213,8 @@ function UsersPanel() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium truncate">{u.name}</span>
-                    <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium', roleBadge[u.role] || roleBadge.CLIENT)}>{u.role}</span>
-                    {u.twoFactorEnabled && <span title="2FA ativo"><Smartphone className="h-3 w-3 text-success" /></span>}
+                    <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1', roleBadge[u.role] || roleBadge.CLIENT)}>{u.role} <FieldHelp field="security.users.role" /></span>
+                    {u.twoFactorEnabled && <span title="2FA ativo" className="flex items-center gap-1"><Smartphone className="h-3 w-3 text-success" /> <FieldHelp field="security.users.twoFactor" /></span>}
                     {!u.isActive && <span className="text-[10px] text-error bg-error/10 px-1.5 py-0.5 rounded-full">Inativo</span>}
                     {u.lockedUntil && new Date(u.lockedUntil) > new Date() && <span title="Conta bloqueada"><Lock className="h-3 w-3 text-error" /></span>}
                   </div>
@@ -159,6 +236,7 @@ function UsersPanel() {
 }
 
 function MfaPanel() {
+  const toast = useToast()
   const [setupData, setSetupData] = useState<{ secret: string; otpauth: string } | null>(null)
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
@@ -166,21 +244,41 @@ function MfaPanel() {
 
   const handleSetup = async () => {
     setLoading(true)
-    try { const { data } = await api.post('/security/2fa/setup'); setSetupData(data) } catch {}
+    try { const { data } = await api.post('/security/2fa/setup'); setSetupData(data) }
+    catch (err) { toast.error('Falha ao configurar 2FA') }
     finally { setLoading(false) }
   }
 
   const handleVerify = async () => {
     setLoading(true); setMessage('')
-    try { const { data } = await api.post('/security/2fa/verify', { code }); setMessage(data.message); setSetupData(null); setCode('') }
+    try {
+      const { data } = await api.post('/security/2fa/verify', { code })
+      toast.success('2FA ativado com sucesso')
+      setMessage(data.message)
+      setSetupData(null)
+      setCode('')
+    }
     catch (err: any) { setMessage(err.response?.data?.error?.message || 'Erro') }
     finally { setLoading(false) }
   }
 
   const handleDisable = async () => {
+    if (!code || code.length !== 6) {
+      toast.error('Informe um código TOTP válido de 6 dígitos')
+      return
+    }
     setLoading(true); setMessage('')
-    try { const { data } = await api.post('/security/2fa/disable', { code }); setMessage(data.message) }
-    catch (err: any) { setMessage(err.response?.data?.error?.message || 'Erro') }
+    try {
+      const { data } = await api.post('/security/2fa/disable', { code })
+      toast.success('2FA desabilitado com sucesso')
+      setMessage(data.message)
+      setCode('')
+    }
+    catch (err: any) {
+      const errorMsg = err.response?.data?.error?.message || 'Falha ao desabilitar 2FA'
+      toast.error(errorMsg)
+      setMessage(errorMsg)
+    }
     finally { setLoading(false) }
   }
 
@@ -188,7 +286,7 @@ function MfaPanel() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><Smartphone className="h-4 w-4" /> Autenticação em Duas Etapas (2FA)</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2"><Smartphone className="h-4 w-4" /> Autenticação em Duas Etapas (2FA) <FieldHelp field="security.users.twoFactor" /></CardTitle>
           <CardDescription>Configure TOTP via app autenticador (Google Authenticator, Authy, etc)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -220,19 +318,26 @@ function MfaPanel() {
 }
 
 function SessionsPanel() {
+  const toast = useToast()
   const [sessions, setSessions] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(false)
 
   const fetch = useCallback(async () => {
     setLoading(true)
-    try { const { data } = await api.get('/security/sessions'); setSessions(data) } catch {}
+    try { const { data } = await api.get('/security/sessions'); setSessions(data) }
+    catch (err) { toast.error('Falha ao carregar sessões') }
     finally { setLoading(false) }
-  }, [])
+  }, [toast])
 
   useEffect(() => { fetch() }, [fetch])
 
   const handleRevoke = async (id: string) => {
-    try { await api.delete(`/security/sessions/${id}`); fetch() } catch {}
+    try {
+      await api.delete(`/security/sessions/${id}`)
+      toast.success('Sessão revogada com sucesso')
+      fetch()
+    }
+    catch (err) { toast.error('Falha ao revogar sessão') }
   }
 
   return (
@@ -262,6 +367,7 @@ function SessionsPanel() {
 }
 
 function PasswordPanel() {
+  const toast = useToast()
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -273,8 +379,15 @@ function PasswordPanel() {
     setSaving(true)
     try {
       const { data } = await api.post('/security/change-password', { currentPassword: form.currentPassword, newPassword: form.newPassword })
-      setMessage(data.message); setForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
-    } catch (err: any) { setMessage(err.response?.data?.error?.message || 'Erro'); setIsError(true) }
+      toast.success('Senha alterada com sucesso')
+      setMessage(data.message)
+      setForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error?.message || 'Falha ao alterar senha'
+      toast.error(errorMsg)
+      setMessage(errorMsg)
+      setIsError(true)
+    }
     finally { setSaving(false) }
   }
 
