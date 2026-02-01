@@ -24,6 +24,9 @@ import {
   Lock,
   StickyNote,
   UserCheck,
+  ShieldAlert,
+  Check,
+  X,
 } from 'lucide-react'
 import { ProtocolBar } from '@/components/chat/protocol-bar'
 import { AttendantPanel } from '@/components/chat/attendant-panel'
@@ -407,6 +410,44 @@ export default function ChatPage() {
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [closeModalOpen, setCloseModalOpen] = useState(false)
   const [protocolCounts, setProtocolCounts] = useState<{ escalated: number; mine: number }>({ escalated: 0, mine: 0 })
+
+  // Inline approval state
+  const [pendingApprovals, setPendingApprovals] = useState<any[]>([])
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+
+  const fetchPendingApprovals = useCallback(async () => {
+    if (!selectedId) return
+    try {
+      const { data } = await api.get(`/instances/${selectedId}/approvals/pending`)
+      setPendingApprovals(data.items || [])
+    } catch { /* silent */ }
+  }, [selectedId])
+
+  useEffect(() => {
+    fetchPendingApprovals()
+    const iv = setInterval(fetchPendingApprovals, 10_000)
+    return () => clearInterval(iv)
+  }, [fetchPendingApprovals])
+
+  const handleInlineApprove = async (id: string, permanent: boolean) => {
+    setApprovingId(id)
+    try {
+      await api.put(`/instances/${selectedId}/approvals/${id}/approve`, { permanent })
+      toast.success('Acesso liberado')
+      fetchPendingApprovals()
+    } catch { toast.error('Erro ao liberar') }
+    finally { setApprovingId(null) }
+  }
+
+  const handleInlineDeny = async (id: string) => {
+    setApprovingId(id)
+    try {
+      await api.put(`/instances/${selectedId}/approvals/${id}/deny`, {})
+      toast.success('Acesso negado')
+      fetchPendingApprovals()
+    } catch { toast.error('Erro ao negar') }
+    finally { setApprovingId(null) }
+  }
 
   // Fetch protocol for selected session
   const fetchProtocol = useCallback(async (sessionId: string) => {
@@ -876,6 +917,57 @@ export default function ChatPage() {
                 )}
                 <div ref={messagesEndRef} />
               </div>
+
+              {/* Inline approval cards */}
+              {pendingApprovals.length > 0 && (
+                <div className="border-t bg-yellow-50/50 dark:bg-yellow-950/10 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    O assistente precisa da sua aprovação
+                  </div>
+                  {pendingApprovals.slice(0, 3).map((a) => (
+                    <div key={a.id} className="flex items-center gap-2 bg-card rounded-lg border border-yellow-200 dark:border-yellow-800 p-2">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium">{a.description}</span>
+                        <span className="text-[10px] text-muted-foreground ml-1.5 font-mono">{a.toolName}</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-xs bg-green-600 hover:bg-green-700 text-white"
+                          disabled={approvingId === a.id}
+                          onClick={() => handleInlineApprove(a.id, false)}
+                        >
+                          {approvingId === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-xs"
+                          disabled={approvingId === a.id}
+                          onClick={() => handleInlineApprove(a.id, true)}
+                        >
+                          Sempre
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-1.5 text-xs text-muted-foreground"
+                          disabled={approvingId === a.id}
+                          onClick={() => handleInlineDeny(a.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {pendingApprovals.length > 3 && (
+                    <a href="/approvals" className="text-[10px] text-yellow-600 hover:underline">
+                      +{pendingApprovals.length - 3} mais...
+                    </a>
+                  )}
+                </div>
+              )}
 
               {/* Attendant panel - visible when user is assigned and mode is A or B */}
               {protocol && user && protocol.assignedTo === user.id &&

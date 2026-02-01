@@ -21,6 +21,7 @@ import { chatRoutes } from './chat.routes.js';
 import { openclawConfigRoutes } from './openclaw-config.routes.js';
 import { nodesRoutes } from './nodes.routes.js';
 import { protocolRoutes } from './protocol.routes.js';
+import { approvalsRoutes } from './approvals.routes.js';
 
 const router = Router();
 
@@ -46,5 +47,6 @@ router.use('/instances', chatRoutes);
 router.use('/instances', openclawConfigRoutes);
 router.use('/instances', nodesRoutes);
 router.use('/instances', protocolRoutes);
+router.use('/instances', approvalsRoutes);
 
 export { router as routes };

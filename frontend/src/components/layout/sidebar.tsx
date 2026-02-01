@@ -1,5 +1,8 @@
 import { NavLink } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { useInstance } from '@/context/instance-context'
+import { api } from '@/lib/api-client'
 import {
   LayoutDashboard,
   Compass,
@@ -9,6 +12,7 @@ import {
   ScrollText,
   ListTodo,
   ShieldCheck,
+  ShieldAlert,
   Stethoscope,
   Settings,
   Settings2,
@@ -27,6 +31,7 @@ const menuItems = [
   { label: 'Agents', icon: Bot, path: '/agents', enabled: true },
   { label: 'Canais', icon: MessageCircle, path: '/channels', enabled: true },
   { label: 'Conversas', icon: MessagesSquare, path: '/chat', enabled: true },
+  { label: 'Aprovações', icon: ShieldAlert, path: '/approvals', enabled: true, badgeKey: 'approvals' },
   { label: 'Planos de Uso', icon: CreditCard, path: '/plans', enabled: true },
   { label: 'Automações', icon: Zap, path: '/automations', enabled: true },
   { label: 'Webhooks', icon: Webhook, path: '/webhooks', enabled: true },
@@ -40,12 +45,37 @@ const menuItems = [
   { label: 'OpenClaw', icon: Settings2, path: '/openclaw-config', enabled: true },
 ]
 
+function useApprovalCount() {
+  const { selectedId } = useInstance()
+  const [count, setCount] = useState(0)
+
+  const fetchCount = useCallback(async () => {
+    if (!selectedId) { setCount(0); return }
+    try {
+      const res = await api.get(`/instances/${selectedId}/approvals/count`)
+      setCount(res.data.count || 0)
+    } catch {
+      // silently fail
+    }
+  }, [selectedId])
+
+  useEffect(() => {
+    fetchCount()
+    const interval = setInterval(fetchCount, 10_000)
+    return () => clearInterval(interval)
+  }, [fetchCount])
+
+  return count
+}
+
 interface SidebarProps {
   open: boolean
   onClose: () => void
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
+  const approvalCount = useApprovalCount()
+
   return (
     <>
       {/* Overlay mobile */}
@@ -61,32 +91,41 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         )}
       >
         <nav className="p-3 space-y-1 pb-8">
-          {menuItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.enabled ? item.path : '#'}
-              onClick={(e) => {
-                if (!item.enabled) e.preventDefault()
-                else onClose()
-              }}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                  item.enabled
-                    ? isActive
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
-                    : 'text-muted-foreground/40 cursor-not-allowed',
-                )
-              }
-            >
-              <item.icon className="h-4 w-4 shrink-0" />
-              <span>{item.label}</span>
-              {!item.enabled && (
-                <span className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Em breve</span>
-              )}
-            </NavLink>
-          ))}
+          {menuItems.map((item) => {
+            const badgeCount = item.badgeKey === 'approvals' ? approvalCount : 0
+
+            return (
+              <NavLink
+                key={item.path}
+                to={item.enabled ? item.path : '#'}
+                onClick={(e) => {
+                  if (!item.enabled) e.preventDefault()
+                  else onClose()
+                }}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    item.enabled
+                      ? isActive
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      : 'text-muted-foreground/40 cursor-not-allowed',
+                  )
+                }
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                <span>{item.label}</span>
+                {badgeCount > 0 && (
+                  <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white min-w-[18px] text-center animate-pulse">
+                    {badgeCount}
+                  </span>
+                )}
+                {!item.enabled && (
+                  <span className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Em breve</span>
+                )}
+              </NavLink>
+            )
+          })}
         </nav>
       </aside>
     </>

@@ -38,6 +38,9 @@ model User {
   closedProtocols    Protocol[]        @relation("ClosedProtocols")
   protocolMessages   ProtocolMessage[]
 
+  // Tool Approval relations
+  approvalDecisions  ToolApproval[]    @relation("ApprovalDecisions")
+
   @@map("users")
 }
 
@@ -112,6 +115,7 @@ model Instance {
   webhookEndpoints  WebhookEndpoint[]
   contactCache      ContactCache[]
   protocols         Protocol[]
+  toolApprovals     ToolApproval[]
   setupProgress     SetupProgress?
   jobs              Job[]
 
@@ -610,4 +614,46 @@ model ProtocolSequence {
   lastNum Int    @default(0) @map("last_num")
 
   @@map("protocol_sequence")
+}
+
+// ═══════════════════════════════════════
+// TOOL APPROVALS — Central de Aprovações
+// ═══════════════════════════════════════
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXPIRED
+}
+
+enum ApprovalCategory {
+  TOOL
+  EXEC
+  API
+  ELEVATED
+}
+
+model ToolApproval {
+  id            String           @id @default(cuid())
+  instanceId    String           @map("instance_id")
+  sessionId     String?          @map("session_id")
+  category      ApprovalCategory
+  toolName      String           @map("tool_name")
+  description   String
+  context       String?          @db.Text
+  risk          String           @default("low")
+  status        ApprovalStatus   @default(PENDING)
+  decidedBy     String?          @map("decided_by")
+  decidedAt     DateTime?        @map("decided_at")
+  expiresAt     DateTime?        @map("expires_at")
+  permanent     Boolean          @default(false)
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  instance      Instance         @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  decidedByUser User?            @relation("ApprovalDecisions", fields: [decidedBy], references: [id])
+
+  @@index([instanceId, status])
+  @@index([instanceId, createdAt])
+  @@map("tool_approvals")
 }

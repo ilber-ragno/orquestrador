@@ -2,6 +2,8 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../utils/logger.js';
 import * as openclaw from './openclaw.service.js';
 import * as protocolService from './protocol.service.js';
+import * as approvalService from './approval.service.js';
+import { execInContainer } from './lxc.service.js';
 
 const POLL_INTERVAL = 15_000; // 15 seconds
 const PROTOCOL_CREATION_WINDOW = 24 * 3600_000; // 24h - create protocols for recent sessions
@@ -182,6 +184,33 @@ async function checkPendingSurveys() {
   }
 }
 
+// ═══════════════════════════════════════
+// TOOL APPROVAL DETECTION
+// ═══════════════════════════════════════
+
+async function checkPendingApprovals(instance: { id: string; containerHost: string; containerName: string }) {
+  const { containerHost: host, containerName: container } = instance;
+
+  try {
+    // Read last 100 lines of gateway log to detect blocked tools
+    const result = await execInContainer(host, container,
+      'tail -100 /tmp/openclaw-gateway.log 2>/dev/null || tail -100 /tmp/openclaw/*.log 2>/dev/null || echo ""',
+      5000,
+    );
+    if (!result.stdout) return;
+
+    const blockedTools = approvalService.detectBlockedTools(result.stdout);
+    for (const toolName of blockedTools) {
+      await approvalService.createApproval(instance.id, {
+        toolName,
+        context: `Detectado automaticamente nos logs do container ${container}`,
+      });
+    }
+  } catch (err: any) {
+    logger.error({ instanceId: instance.id, err: err.message }, 'session-poller: checkPendingApprovals failed');
+  }
+}
+
 async function pollAll() {
   try {
     const instances = await prisma.instance.findMany({
@@ -195,10 +224,14 @@ async function pollAll() {
     for (const inst of instances) {
       if (!inst.containerHost || !inst.containerName) continue;
       await pollInstance({ id: inst.id, containerHost: inst.containerHost, containerName: inst.containerName });
+      await checkPendingApprovals({ id: inst.id, containerHost: inst.containerHost, containerName: inst.containerName });
     }
 
     // Check for pending survey responses
     await checkPendingSurveys();
+
+    // Expire old approval requests
+    await approvalService.expireOld();
   } catch (err: any) {
     logger.error({ err: err.message }, 'session-poller: pollAll failed');
   }

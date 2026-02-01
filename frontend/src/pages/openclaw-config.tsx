@@ -1752,6 +1752,80 @@ function ToolsPanel({
           </div>
         </div>
 
+        {/* ─── Presets de Permissões ─── */}
+        <div className="border-t border-border pt-4">
+          <p className="text-xs font-medium text-muted-foreground mb-2">Configuração rápida</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {([
+              {
+                label: 'Atendimento',
+                emoji: '💬',
+                desc: 'Responder mensagens, buscar na web, processar mídia',
+                apply: () => onChange({
+                  ...data,
+                  profile: 'messaging',
+                  web: { ...data.web, searchEnabled: true, fetchEnabled: true },
+                  media: { ...data.media, imageEnabled: true, audioEnabled: true, videoEnabled: false },
+                  exec: { ...data.exec, security: 'allowlist', safeBins: ['curl', 'wget', 'jq', 'ffmpeg'], ask: 'on-miss' },
+                }),
+              },
+              {
+                label: 'Criação',
+                emoji: '🎨',
+                desc: 'Tudo de Atendimento + gerar imagens, áudios e vídeos',
+                apply: () => onChange({
+                  ...data,
+                  profile: 'full',
+                  web: { ...data.web, searchEnabled: true, fetchEnabled: true },
+                  media: { ...data.media, imageEnabled: true, audioEnabled: true, videoEnabled: true },
+                  allow: [...new Set([...data.allow, 'group:web', 'group:media'])],
+                  exec: { ...data.exec, security: 'allowlist', safeBins: [...new Set([...data.exec.safeBins, 'curl', 'wget', 'ffmpeg', 'python3', 'node', 'jq'])], ask: 'on-miss' },
+                }),
+              },
+              {
+                label: 'Técnico',
+                emoji: '🛠️',
+                desc: 'Tudo liberado: terminal, código, arquivos, internet',
+                apply: () => onChange({
+                  ...data,
+                  profile: 'full',
+                  web: { ...data.web, searchEnabled: true, fetchEnabled: true },
+                  media: { ...data.media, imageEnabled: true, audioEnabled: true, videoEnabled: true },
+                  allow: [...new Set([...data.allow, 'group:web', 'group:media', 'group:fs', 'group:exec'])],
+                  exec: { ...data.exec, security: 'full', ask: 'never' },
+                  elevated: { ...data.elevated, enabled: true },
+                }),
+              },
+              {
+                label: 'Mínimo',
+                emoji: '🔒',
+                desc: 'Só responder mensagens, sem ferramentas extras',
+                apply: () => onChange({
+                  ...data,
+                  profile: 'minimal',
+                  web: { ...data.web, searchEnabled: false, fetchEnabled: false },
+                  media: { ...data.media, imageEnabled: false, audioEnabled: false, videoEnabled: false },
+                  exec: { ...data.exec, security: 'off', safeBins: [], ask: 'never' },
+                  allow: [],
+                  deny: [],
+                }),
+              },
+            ]).map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={preset.apply}
+                className="flex flex-col items-center gap-1 p-3 rounded-lg border border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-center"
+                title={preset.desc}
+              >
+                <span className="text-xl">{preset.emoji}</span>
+                <span className="text-xs font-medium">{preset.label}</span>
+                <span className="text-[10px] text-muted-foreground leading-tight hidden sm:block">{preset.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="border-t border-border pt-4">
           <div className="flex items-center gap-2 mb-1">
             <ShieldCheck className="h-4 w-4 text-primary" />
@@ -1884,6 +1958,85 @@ function ToolsPanel({
             checked={data.media.videoEnabled}
             onChange={(v) => onChange({ ...data, media: { ...data.media, videoEnabled: v } })}
           />
+        </div>
+
+        {/* ─── Cards visuais por categoria ─── */}
+        <div className="border-t border-border pt-4">
+          <p className="text-xs font-medium text-muted-foreground mb-2">Capacidades do assistente</p>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              {
+                icon: '🌐',
+                label: 'Internet',
+                desc: 'Buscar e acessar páginas',
+                active: data.web.searchEnabled || data.web.fetchEnabled,
+                toggle: () => {
+                  const next = !(data.web.searchEnabled || data.web.fetchEnabled)
+                  onChange({ ...data, web: { ...data.web, searchEnabled: next, fetchEnabled: next } })
+                },
+              },
+              {
+                icon: '🎨',
+                label: 'Criar mídia',
+                desc: 'Gerar imagens, áudios, vídeos',
+                active: data.media.imageEnabled || data.media.audioEnabled || data.media.videoEnabled,
+                toggle: () => {
+                  const next = !(data.media.imageEnabled || data.media.audioEnabled || data.media.videoEnabled)
+                  onChange({ ...data, media: { ...data.media, imageEnabled: next, audioEnabled: next, videoEnabled: next } })
+                },
+              },
+              {
+                icon: '📁',
+                label: 'Arquivos',
+                desc: 'Ler e escrever arquivos',
+                active: data.allow.includes('group:fs'),
+                toggle: () => {
+                  const has = data.allow.includes('group:fs')
+                  onChange({
+                    ...data,
+                    allow: has ? data.allow.filter(a => a !== 'group:fs') : [...data.allow, 'group:fs'],
+                    deny: has ? data.deny : data.deny.filter(d => d !== 'group:fs'),
+                  })
+                },
+              },
+              {
+                icon: '⚙️',
+                label: 'Terminal',
+                desc: 'Executar programas',
+                active: data.exec.security !== 'off',
+                toggle: () => {
+                  onChange({
+                    ...data,
+                    exec: { ...data.exec, security: data.exec.security === 'off' ? 'allowlist' : 'off' },
+                  })
+                },
+              },
+            ]).map((cat) => (
+              <button
+                key={cat.label}
+                type="button"
+                onClick={cat.toggle}
+                className={cn(
+                  'flex items-center gap-2.5 p-2.5 rounded-lg border text-left transition-all',
+                  cat.active
+                    ? 'border-green-500/30 bg-green-500/5'
+                    : 'border-border hover:border-foreground/20',
+                )}
+              >
+                <span className="text-lg">{cat.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-medium">{cat.label}</p>
+                    <span className={cn(
+                      'w-1.5 h-1.5 rounded-full',
+                      cat.active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600',
+                    )} />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">{cat.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
 
         <AdvancedToggle open={showAdvanced} onToggle={() => setShowAdvanced(!showAdvanced)} />

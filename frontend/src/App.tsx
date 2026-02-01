@@ -23,6 +23,7 @@ import ChatPage from '@/pages/chat'
 import OpenClawConfigPage from '@/pages/openclaw-config'
 import WebhooksPage from '@/pages/webhooks'
 import NodesPage from '@/pages/nodes'
+import ApprovalsPage from '@/pages/approvals'
 
 export default function App() {
   return (
@@ -51,6 +52,7 @@ export default function App() {
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/webhooks" element={<WebhooksPage />} />
               <Route path="/nodes" element={<NodesPage />} />
+              <Route path="/approvals" element={<ApprovalsPage />} />
               <Route path="/openclaw-config" element={<OpenClawConfigPage />} />
             </Route>
           </Route>
